@@ -1,0 +1,14 @@
+# Secrets and machine-local overrides.
+.env
+
+# Generated output. Prompts and digests are derived — regenerate them.
+prompts/*.md
+digest/*.md
+
+# The reading queue is real state, not derived: it holds which papers you have read and
+# rejected, and a sweep cannot reconstruct it. Ignored here only because it is personal
+# rather than shared; back it up if you care about it.
+state/
+
+__pycache__/
+*.py[cod]
