@@ -4,14 +4,25 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-.PHONY: help ui doctor test digest queue elicit write clean
+.PHONY: help ui ui-up ui-down ui-status ui-restart doctor test digest queue elicit write clean
 
 help:              ## show this help
 	@grep -hE '^[a-z-]+:.*?##' $(MAKEFILE_LIST) \
-	  | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1;36m%-8s\033[0m %s\n", $$1, $$2}'
+	  | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1;36m%-10s\033[0m %s\n", $$1, $$2}'
 
-ui:                ## serve the local UI at http://127.0.0.1:8473
-	@bash scripts/ui.sh
+ui:                ## serve the UI in the foreground at http://127.0.0.1:8473 (Ctrl-C to stop)
+	@bash scripts/ui.sh run
+
+ui-up:             ## start the UI detached in the background
+	@bash scripts/ui.sh start
+
+ui-down:           ## stop the background UI started with ui-up
+	@bash scripts/ui.sh stop
+
+ui-status:         ## check whether the background UI is running
+	@bash scripts/ui.sh status
+
+ui-restart: ui-down ui-up ## restart the background UI
 
 doctor:            ## check every source is readable, and read-only
 	@bash scripts/doctor.sh

@@ -11,7 +11,8 @@ It **cannot write to indexia or perceptua**. That is enforced by code and by tes
 convention. See [Read-only, structurally](#read-only-structurally).
 
 ```bash
-make ui        # the local UI at http://127.0.0.1:8473
+make ui        # the local UI in the foreground at http://127.0.0.1:8473
+make ui-up     # same, detached in the background          (make ui-down to stop)
 make doctor    # is every source readable, and read-only?
 make digest    # sweep arxiv, top up the queue        (~12s, weekly)
 make queue     # what is waiting to be read
@@ -25,8 +26,12 @@ make test      # the read-only gate must never regress
 ## The UI
 
 ```bash
-bash scripts/ui.sh          # http://127.0.0.1:8473
-bash scripts/ui.sh --open   # and open a browser
+bash scripts/ui.sh          # foreground, http://127.0.0.1:8473, Ctrl-C to stop
+bash scripts/ui.sh run --open
+
+bash scripts/ui.sh start    # same, detached — logs to ~/.eliciter/ui.log
+bash scripts/ui.sh stop
+bash scripts/ui.sh status
 ```
 
 Four tabs — **Prompts** (with source, register and target project), **Queue** (unread, with
@@ -34,7 +39,13 @@ the terms that matched, one click to read/reject), **Decided** (with undo), **Se
 (ad-hoc arxiv, one click to add). The header runs the sweep, the elicit, and the search.
 
 Stdlib `http.server`, one HTML file, no dependencies — the same zero-dependency posture as
-the rest of the project. Loopback only, no auth, Ctrl-C to stop, nothing daemonized.
+the rest of the project. Loopback only, no auth.
+
+**Backgroundable, and kept fresh rather than cached.** Every request re-reads
+`state/papers.json` and `state/prompts.json` off disk — nothing is held in memory between
+requests — and the page itself polls `/api/state` on an interval and on refocus. So `make
+ui-up` and forgetting about the tab does not mean looking at a stale queue: a sweep or elicit
+run from the CLI (or cron) shows up in the browser without a manual reload.
 
 Two cheap protections against a hostile page in your own browser: the **Host header** must
 be localhost (defeating DNS rebinding, where an attacker's domain resolves to 127.0.0.1 so

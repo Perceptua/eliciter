@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 """Serve the local eliciter UI.
 
-  scripts/ui.sh                 # http://127.0.0.1:8473
-  scripts/ui.sh --port 8474
-  scripts/ui.sh --open          # and open a browser
+  scripts/ui.sh                 # foreground, http://127.0.0.1:8473, Ctrl-C to stop
+  scripts/ui.sh run --port 8474
+  scripts/ui.sh run --open      # and open a browser
+  scripts/ui.sh start           # same, detached — logs to ~/.eliciter/ui.log
+  scripts/ui.sh stop
+  scripts/ui.sh status
 
 Loopback only, no auth — the same posture as indexia's UI, for the same reason: this is a
 single-user tool reading a single-user corpus, and a login screen would be ceremony over a
 socket nobody else can reach. Cross-origin protections are in `eliciterlib/webui.py`.
 
-Ctrl-C to stop. Nothing is daemonized: a UI you forgot was running is a UI holding a stale
-view of a queue you changed from the CLI.
+Every request re-reads state from disk (`state/papers.json`, `state/prompts.json`) rather
+than caching it in the process, and the page itself polls `/api/state` on an interval and on
+refocus (see `eliciterlib/ui.html`) — so a tab left open against a backgrounded server, or a
+queue changed from the CLI while the UI runs, does not go stale the way an in-memory cache
+would.
 """
 import argparse
 import os
