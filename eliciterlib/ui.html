@@ -253,7 +253,25 @@ async function doSearch() {
 $("#go").onclick = doSearch;
 $("#q").addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
 
+// The server is now backgroundable (scripts/ui.sh start), so a tab can outlive the CLI
+// invocation that changed the queue. Every /api/state read is already fresh off disk
+// (see webui.state_payload) — this just makes sure an open tab actually asks again:
+// on an interval while visible, and immediately on getting focus back.
+let pollTimer = null;
+function schedulePoll() {
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(async () => {
+    if (!busy && !document.hidden) { try { await refresh(); } catch (e) { /* transient */ } }
+    schedulePoll();
+  }, 20000);
+}
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && !busy) refresh().catch(() => {});
+});
+window.addEventListener("focus", () => { if (!busy) refresh().catch(() => {}); });
+
 refresh().catch(e => toast(e.message, 6000));
+schedulePoll();
 </script>
 </body>
 </html>
