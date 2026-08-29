@@ -1,6 +1,9 @@
 # Secrets and machine-local overrides.
 .env
 
+# Tailscale-issued TLS cert/key for --tailscale, machine-local.
+.certs/
+
 # Generated output. Prompts and digests are derived — regenerate them.
 prompts/*.md
 digest/*.md

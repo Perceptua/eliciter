@@ -12,6 +12,11 @@ Loopback only, no auth — the same posture as indexia's UI, for the same reason
 single-user tool reading a single-user corpus, and a login screen would be ceremony over a
 socket nobody else can reach. Cross-origin protections are in `eliciterlib/webui.py`.
 
+`--tailscale` widens that deliberately: binds this machine's Tailscale IP and serves HTTPS
+with a tailscale-issued cert, so another device on the tailnet can reach the UI at a trusted
+https:// URL. The tailnet becomes the trust boundary in place of loopback — see the tradeoff
+noted in `eliciterlib/webui.py`.
+
 Every request re-reads state from disk (`state/papers.json`, `state/prompts.json`) rather
 than caching it in the process, and the page itself polls `/api/state` on an interval and on
 refocus (see `eliciterlib/ui.html`) — so a tab left open against a backgrounded server, or a
@@ -22,6 +27,7 @@ import argparse
 import os
 import sys
 import webbrowser
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -29,7 +35,7 @@ from eliciterlib import config                       # noqa: E402
 
 config.bootstrap()
 
-from eliciterlib import webui                        # noqa: E402
+from eliciterlib import tailscale, webui              # noqa: E402
 
 
 def main():
@@ -37,16 +43,33 @@ def main():
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--port", type=int, help="default from ELICITER_UI_PORT")
     p.add_argument("--open", action="store_true", help="open a browser at the URL")
+    p.add_argument("--tailscale", action="store_true",
+                   help="bind this machine's Tailscale IP and serve HTTPS with a "
+                        "tailscale-issued cert, reachable from other tailnet devices. "
+                        "Trades away the loopback-only guarantee — see webui.py.")
     a = p.parse_args()
 
+    host, tls, fqdn = "127.0.0.1", None, None
+    if a.tailscale:
+        try:
+            host = tailscale.tailscale_ip()
+            cert_path, key_path, fqdn = tailscale.provision_cert(
+                Path(config.out_dir(".certs"))
+            )
+        except tailscale.TailscaleError as e:
+            raise SystemExit(f"[ui] {e}")
+        tls = (cert_path, key_path)
+
     try:
-        httpd, port = webui.serve(port=a.port)
+        httpd, port = webui.serve(port=a.port, host=host, tls=tls, allowed_host=fqdn)
     except OSError as e:
         raise SystemExit(
             f"cannot bind {a.port or config.i('ELICITER_UI_PORT')} ({e}) — something else "
             "is on that port; pass --port or set ELICITER_UI_PORT")
 
-    url = f"http://127.0.0.1:{port}/"
+    scheme = "https" if tls else "http"
+    shown = fqdn or "127.0.0.1"
+    url = f"{scheme}://{shown}:{port}/"
     print(f"[ui] eliciter at {url}  (Ctrl-C to stop)")
     if a.open:
         webbrowser.open(url)
