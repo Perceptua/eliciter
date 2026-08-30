@@ -39,7 +39,13 @@ the terms that matched, one click to read/reject), **Decided** (with undo), **Se
 (ad-hoc arxiv, one click to add). The header runs the sweep, the elicit, and the search.
 
 Stdlib `http.server`, one HTML file, no dependencies — the same zero-dependency posture as
-the rest of the project. Loopback only, no auth.
+the rest of the project. Loopback only, no auth, by default.
+
+`bash scripts/ui.sh start --tailscale` widens that deliberately: binds this machine's
+Tailscale IP and serves HTTPS with a tailscale-issued cert, so another device on the tailnet
+can reach the UI at a trusted `https://` URL. This trades away the loopback guarantee below —
+the tailnet becomes the trust boundary instead, with still no login. See the tradeoff spelled
+out in `eliciterlib/webui.py`.
 
 **Backgroundable, and kept fresh rather than cached.** Every request re-reads
 `state/papers.json` and `state/prompts.json` off disk — nothing is held in memory between

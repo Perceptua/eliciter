@@ -12,13 +12,22 @@ to either corpus.
 
 Safety posture, matching indexia's (loopback-only, single-user, no auth):
 
-  * **Binds 127.0.0.1 only.** Never a routable interface.
+  * **Binds 127.0.0.1 only, by default.** Never a routable interface.
   * **Host header is checked.** A DNS-rebinding attack resolves an attacker's domain to
     127.0.0.1 so a page in your browser can reach this server; requiring the Host to be
     localhost defeats it, because the rebound request carries the attacker's hostname.
   * **Mutating requests need `X-Eliciter: 1`.** A cross-origin page cannot set a custom
     header without a CORS preflight, and this server answers no preflight — so a hostile
     page cannot make your browser sweep arxiv or mark your papers read.
+
+**`--tailscale` deliberately trades away the loopback guarantee.** It binds this
+machine's Tailscale IP, serves HTTPS with a tailscale-issued cert, and widens the Host
+check to also accept the tailnet's MagicDNS name (see `allowed_host` below). The DNS-
+rebinding and CORS-preflight defenses above only stop a hostile *page in a browser* —
+they say nothing about a device on the tailnet itself, which can send `X-Eliciter: 1`
+directly. There is still no login. The tailnet becomes the trust boundary: this is safe
+exactly as long as you trust every device on it, the same tradeoff nomotactic's mobile
+client already makes against nomothetic's API.
 
 Session spawning is the one thing the browser genuinely cannot do: `claude` is an
 interactive terminal program and there is no terminal here. So `/api/brief` returns the
@@ -27,6 +36,7 @@ boundary rather than a launch button that half-works.
 """
 import json
 import os
+import ssl
 import threading
 import traceback
 import urllib.parse
@@ -145,13 +155,19 @@ def brief_for(n):
 class Handler(BaseHTTPRequestHandler):
     server_version = "eliciter"
 
+    # Set by serve() when running with --tailscale: the one extra Host value
+    # to accept beyond loopback. None means loopback-only (the default).
+    allowed_host = None
+
     def log_message(self, fmt, *args):      # quieter than the default access log
         pass
 
     # -- guards --------------------------------------------------------------
     def _host_ok(self):
         host = (self.headers.get("Host") or "").split(":")[0]
-        return host in ("localhost", "127.0.0.1", "[::1]", "::1", "")
+        if host in ("localhost", "127.0.0.1", "[::1]", "::1", ""):
+            return True
+        return self.allowed_host is not None and host == self.allowed_host
 
     def _send(self, code, body, ctype="application/json"):
         raw = body if isinstance(body, bytes) else str(body).encode("utf-8")
@@ -230,7 +246,19 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(500, {"error": f"{type(e).__name__}: {e}"})
 
 
-def serve(port=None, host="127.0.0.1"):
+def serve(port=None, host="127.0.0.1", tls=None, allowed_host=None):
+    """Bind and return ``(httpd, port)``, unstarted.
+
+    ``tls``, if given, is a ``(cert_path, key_path)`` pair — see
+    :mod:`eliciterlib.tailscale`. ``allowed_host`` is the extra Host value
+    ``Handler._host_ok`` should accept beyond loopback (the tailnet FQDN).
+    """
     port = port or config.i("ELICITER_UI_PORT")
+    Handler.allowed_host = allowed_host
     httpd = ThreadingHTTPServer((host, port), Handler)
+    if tls is not None:
+        cert_path, key_path = tls
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(certfile=str(cert_path), keyfile=str(key_path))
+        httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
     return httpd, port
