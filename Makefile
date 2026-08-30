@@ -13,8 +13,8 @@ help:              ## show this help
 ui:                ## serve the UI in the foreground at http://127.0.0.1:8473 (Ctrl-C to stop)
 	@bash scripts/ui.sh run
 
-ui-up:             ## start the UI detached in the background
-	@bash scripts/ui.sh start
+ui-up:             ## start the UI detached in the background (ARGS=--tailscale to serve the tailnet over HTTPS)
+	@bash scripts/ui.sh start $(ARGS)
 
 ui-down:           ## stop the background UI started with ui-up
 	@bash scripts/ui.sh stop
