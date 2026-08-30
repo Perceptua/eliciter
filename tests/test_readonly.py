@@ -143,7 +143,31 @@ class TestDirHandle(unittest.TestCase):
 
     def test_has_no_write_methods(self):
         public = {n for n in dir(self.gate) if not n.startswith("_")}
-        self.assertEqual(public, {"names", "read", "root"})
+        self.assertEqual(public, {"names", "dirs", "read", "root"})
+
+
+class TestAuduaDirHandle(unittest.TestCase):
+    def setUp(self):
+        self.gate = readonly.audua_dir(config.audua_root())
+
+    def test_lists_session_dirs_and_reads_into_them(self):
+        stems = self.gate.dirs()
+        self.assertTrue(stems, "expected session directories under ELICITER_AUDUA_ROOT")
+        # At least one session should have a summary.md readable through a nested path.
+        readable = [s for s in stems if os.path.isfile(
+            os.path.join(config.audua_root(), s, "summary.md"))]
+        self.assertTrue(readable, "expected at least one session with a summary.md")
+        text = self.gate.read(f"{readable[0]}/summary.md")
+        self.assertIsInstance(text, str)
+
+    def test_refuses_path_traversal(self):
+        for bad in ("../../../etc/passwd", "../README.md", "/etc/passwd"):
+            with self.assertRaises(readonly.ReadOnlyViolation, msg=bad):
+                self.gate.read(bad)
+
+    def test_has_no_write_methods(self):
+        public = {n for n in dir(self.gate) if not n.startswith("_")}
+        self.assertEqual(public, {"names", "dirs", "read", "root"})
 
 
 class TestProjectUsesOnlyTheGate(unittest.TestCase):
@@ -180,8 +204,8 @@ class TestProjectUsesOnlyTheGate(unittest.TestCase):
         Comments are stripped but literals are *not*: the mode argument this looks for is
         itself a literal, so `_code` would erase the very thing being detected.
         """
-        roots = ("ELICITER_INDEXIA_ROOT", "ELICITER_PERCEPTUA_POSTS", "posts_dir(",
-                 "indexia_root")
+        roots = ("ELICITER_INDEXIA_ROOT", "ELICITER_PERCEPTUA_POSTS", "ELICITER_AUDUA_ROOT",
+                 "posts_dir(", "audua_dir(", "indexia_root")
         pattern = re.compile(r"open\s*\([^)]*[\"'][wax]")
         offences = []
         for name, path in _sources():

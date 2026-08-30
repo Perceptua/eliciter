@@ -7,9 +7,9 @@ demonstrably what you do with a paper — every note in the corpus is one claim 
 note, a reconciling essay, a journal entry on an anniversary. perceptua asks for verse,
 in the form the post itself names.
 
-The source also sets the *order* — `signals.SOURCES`, indexia then perceptua then arxiv —
-both here, where it decides who gets the last slot under the limit, and in `render.py`,
-where it decides what you read first.
+The source also sets the *order* — `signals.SOURCES`, indexia then perceptua then audua
+then arxiv — both here, where it decides who gets the last slot under the limit, and in
+`render.py`, where it decides what you read first.
 
 Nothing here decides register from *content*. A prompt never reads a paper's abstract
 and concludes it would make a good poem — that would be the machine deciding what your
@@ -156,6 +156,22 @@ def _move7(s, i):
         signal=s, commit="indexia (essay); bind it back to the root when you commit")
 
 
+# ---- audua → a journal entry against a recorded session ---------------------
+
+def _audua_session(s, i):
+    session = s.meta.get("session", {})
+    has_threads = bool(session.get("threads"))
+    ask = ("Pick one of the threads this recording left open and write the entry that "
+           "follows it up." if has_threads else
+           "Read back through this recording and write the entry it left you thinking — "
+           "not a transcript, whatever it was circling.")
+    return Prompt(
+        register="journal", form="field note",
+        ask=ask,
+        because=f"Recorded {session.get('date')}; nothing has answered it yet.",
+        signal=s, commit="a journal entry; commit to indexia if a claim falls out of it")
+
+
 # ---- perceptua → a response to your own earlier work ------------------------
 
 def _post_response(s, i):
@@ -181,5 +197,6 @@ _BUILDERS = {
     ("indexia", "orphan"): _orphan,
     ("indexia", "on-this-day"): _on_this_day,
     ("indexia", "move7"): _move7,
+    ("audua", "session"): _audua_session,
     ("perceptua", "post-response"): _post_response,
 }

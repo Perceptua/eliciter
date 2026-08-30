@@ -23,6 +23,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULTS = {
     "ELICITER_INDEXIA_ROOT": "/home/aphorikles/indexia",
     "ELICITER_PERCEPTUA_POSTS": "/home/aphorikles/perceptua/perceptua/_posts",
+    "ELICITER_AUDUA_ROOT": "/home/aphorikles/audua/processing/output",
     "ELICITER_ARXIV_CATEGORIES": "cs.AI,cs.LG,cs.NE,q-bio.NC,nlin.AO",
     "ELICITER_ARXIV_LOOKBACK_DAYS": "7",
     "ELICITER_ARXIV_MAX_RESULTS": "300",
@@ -149,6 +150,10 @@ def exclude():
 
 def posts_dir():
     return os.environ["ELICITER_PERCEPTUA_POSTS"]
+
+
+def audua_root():
+    return os.environ["ELICITER_AUDUA_ROOT"]
 
 
 def out_dir(name):

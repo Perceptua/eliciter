@@ -4,11 +4,12 @@ Reads what you've been reading, and asks you to write.
 
 It replaces the weekly Claude Desktop arxiv task with a local sweep, keeps a **reading
 queue** of at most ten papers whose status you control, and turns that queue — together
-with your indexia notes and perceptua posts — into numbered writing prompts. When you want
-to write one, it opens a session in the project where the writing belongs.
+with your indexia notes, perceptua posts, and audua run recordings — into numbered writing
+prompts. When you want to write one, it opens a session in the project where the writing
+belongs.
 
-It **cannot write to indexia or perceptua**. That is enforced by code and by tests, not by
-convention. See [Read-only, structurally](#read-only-structurally).
+It **cannot write to indexia, perceptua, or audua**. That is enforced by code and by tests,
+not by convention. See [Read-only, structurally](#read-only-structurally).
 
 ```bash
 make ui        # the local UI in the foreground at http://127.0.0.1:8473
@@ -107,17 +108,17 @@ you rejected.
 Papers resolve by arxiv id, unique prefix, or queue position — and by *version-stripped* id,
 so a paper you rejected does not come back next week as `v2`. State is `state/papers.json`.
 
-### 3. Read-only over your posts and notes
+### 3. Read-only over your posts, notes, and recordings
 
 See [below](#read-only-structurally). This is the constraint the architecture is built
 around, not a footnote.
 
 ### 4. Prompt short- and long-form responses
 
-`scripts/elicit.sh` renders numbered prompts to `prompts/latest.md`, in three sections —
-**your notes, then your writing, then your reading**. Every prompt is a request for a
-**response** — to a note the corpus is leaning on, to a poem nothing has answered, to a
-paper you have read.
+`scripts/elicit.sh` renders numbered prompts to `prompts/latest.md`, in sections — **your
+notes, your writing, your recordings, then your reading**. Every prompt is a request for a
+**response** — to a note the corpus is leaning on, to a poem nothing has answered, to a run
+you recorded and never wrote up, to a paper you have read.
 
 | Source | Length | Register | The ask |
 |---|---|---|---|
@@ -127,6 +128,7 @@ paper you have read.
 | move 5 — ratified contradiction | long | essay | the essay that holds both together |
 | move 7 — structural debt | long | essay | what came of the note the subtree hangs off |
 | perceptua post | short | verse | the piece that answers this one |
+| audua session, unseen | long | journal | pick an open thread and follow it up (or, if none, respond to the run generally) |
 | paper you have read | short | note | the one claim you took from it |
 
 **The source decides the register.** Nothing decides it from content — a prompt never reads
@@ -139,12 +141,19 @@ seven left no room for the graph or the posts at all, which silently deleted the
 brief about responding to your own work. So a run takes prompts from each source in turn.
 
 **The order of those turns, and of the rendered sections, is `indexia` → `perceptua` →
-`arxiv`** (`signals.SOURCES`). Your own material leads: an indexia or perceptua prompt
-continues work only you can continue, while a paper prompt is available to anyone who read
-the paper — so when you only get through the top of a run, the part that survives is the
-part nobody else could write. Length has not gone; it orders prompts *within* a source, and
-the summary line still says how many short and long you have. It is just no longer the
-first thing you see.
+`audua` → `arxiv`** (`signals.SOURCES`). Your own material leads: an indexia, perceptua or
+audua prompt continues work only you can continue, while a paper prompt is available to
+anyone who read the paper — so when you only get through the top of a run, the part that
+survives is the part nobody else could write. audua sits after perceptua because a poem
+already published is finished material asking for a reply, where a recording is still raw
+and unreviewed. Length has not gone; it orders prompts *within* a source, and the summary
+line still says how many short and long you have. It is just no longer the first thing you
+see.
+
+audua sessions are offered **at most once** rather than tracked with a status you set —
+`state/audua.json` remembers which sessions have already appeared in a rendered run (not a
+`--stdout` preview), and a session that appeared once does not come back. See the docstring
+in `eliciterlib/audua.py` for why this is a simpler shape than the arxiv queue.
 
 ### 5. Spawn a session where the writing belongs
 
@@ -179,8 +188,9 @@ Three layers, in `eliciterlib/readonly.py`:
    `SELECT`/`MATCH`/`TRAVERSE`, no write keyword, checked with string literals stripped so
    a note body containing "delete" cannot trip it.
 
-`ReadOnlyDir` is the same shape for files: `names()`, `read()`, path traversal refused,
-nothing that writes.
+`ReadOnlyDir` is the same shape for files: `names()`, `dirs()`, `read()`, path traversal
+refused, nothing that writes. `posts_dir()` gates perceptua's `_posts/`; `audua_dir()` gates
+audua's per-session output the same way.
 
 **The project may only use the gate.** `tests/test_readonly.py` scans this project's own
 source and fails if any module constructs an `Arcade`, calls `.command(`, or opens a source
@@ -265,12 +275,13 @@ read from `indexia/docker/.env` at run time, so rotating it there is enough.
 
 ```
 eliciterlib/
-  readonly.py  the gate — the only path to either source
+  readonly.py  the gate — the only path to any source
   config.py    bootstrap: paths, indexia's docker/.env, sys.path for notelib
   status.py    the reading queue: unread / read / rejected; read papers → signals
   arxiv.py     the Atom sweep, ranking, and the queue rendering
   rank.py      the interest profile and scoring — no embeddings, and why
   corpus.py    indexia adapter: moves 4–7 → Signals
+  audua.py     audua adapter: unseen session summaries → Signals; state/audua.json
   posts.py     perceptua adapter: posts worth answering
   signals.py   Signal (a source noticed) and Prompt (an ask)
   prompts.py   Signal → Prompt; the register rule lives here and only here
