@@ -27,7 +27,7 @@ ui-restart: ui-down ui-up ## restart the background UI
 doctor:            ## check every source is readable, and read-only
 	@bash scripts/doctor.sh
 
-test:              ## run the tests (the read-only gate must never regress)
+test:              ## run the tests (read-only gate + every UI route answers)
 	@bash scripts/test.sh
 
 sweep:             ## sweep arxiv into state/candidates.json (then ask a session to pick)

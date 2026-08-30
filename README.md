@@ -23,7 +23,7 @@ make queue     # what is waiting to be read
 make gather    # read every source            → state/material.json  (the skill does this)
 make prompts   # render what a session wrote  → prompts/latest.md
 make write     # list prompts; then scripts/write.sh <n>
-make test      # the read-only gate must never regress
+make test      # the read-only gate, and every route still answers
 ```
 
 ---
