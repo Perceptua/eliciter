@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """Turn what is waiting into things to write.
 
-Reads three sources — the indexia graph, the perceptua posts, the reading queue — and
-renders numbered prompts to `prompts/latest.md`. Every prompt is a request for a **response**:
-to a note the corpus is leaning on, to a poem nothing has answered, to a paper you have
-read. They arrive in that order, which is `signals.SOURCES`.
+Reads four sources — the indexia graph, the perceptua posts, audua session transcripts,
+the reading queue — and renders numbered prompts to `prompts/latest.md`. Every prompt is a
+request for a **response**: to a note the corpus is leaning on, to a poem nothing has
+answered, to a run you recorded and never wrote up, to a paper you have read. They arrive in
+that order, which is `signals.SOURCES`.
 
   scripts/elicit.sh                  # all sources
   scripts/elicit.sh --no-papers      # skip papers you have read
   scripts/elicit.sh --stdout         # print instead of writing
 
 This does not touch the network — sweeping is `scripts/arxiv-digest.sh`, run weekly. It
-does not write to indexia or perceptua either; both are read through the gate in
-`eliciterlib/readonly.py`. Use `scripts/write.sh <n>` to open a session where the writing
+does not write to indexia, audua, or perceptua either; all three are read through the gate
+in `eliciterlib/readonly.py`. Use `scripts/write.sh <n>` to open a session where the writing
 actually belongs.
 """
 import argparse
@@ -27,7 +28,7 @@ from eliciterlib import config                                       # noqa: E40
 
 config.bootstrap()
 
-from eliciterlib import arxiv, corpus, posts, prompts, render, status  # noqa: E402
+from eliciterlib import arxiv, audua, corpus, posts, prompts, render, status  # noqa: E402
 
 
 def main():
@@ -36,6 +37,7 @@ def main():
     p.add_argument("--limit", type=int, help="max prompts (default from .env)")
     p.add_argument("--no-papers", action="store_true", help="skip papers you have read")
     p.add_argument("--no-graph", action="store_true", help="skip indexia")
+    p.add_argument("--no-audua", action="store_true", help="skip audua session transcripts")
     p.add_argument("--no-posts", action="store_true", help="skip perceptua")
     p.add_argument("--stdout", action="store_true", help="print instead of writing")
     p.add_argument("--quiet", action="store_true")
@@ -67,21 +69,29 @@ def main():
             log(f"[indexia] unavailable — {e}")
     if db is not None:
         gather("indexia", lambda: corpus.signals(db, log=log))
-    if not a.no_papers:
-        gather("papers", lambda: status.signals(status.Queue(), log=log))
     if not a.no_posts:
         # Posts are matched against the same profile the sweep uses, so the poem that
         # surfaces is the one adjacent to current reading rather than an arbitrary one.
         prof = arxiv.build_profile(db, log=lambda *_: None)
         gather("perceptua", lambda: posts.signals(profile=prof, log=log))
+    if not a.no_audua:
+        gather("audua", lambda: audua.signals(log=log))
+    if not a.no_papers:
+        gather("papers", lambda: status.signals(status.Queue(), log=log))
 
     built = prompts.build(signals, limit=limit)
+    if not a.stdout:
+        # --stdout is a preview, not a run — see its help text. Marking sessions seen there
+        # would retire them without ever writing prompts/latest.md, which is how a `--stdout`
+        # taken to check what a run would show could quietly burn through the unseen queue.
+        audua.mark_seen(built)
 
     quiet = None
     if not built:
         quiet = ("No source produced a signal. " + (
             "All sources answered, so this is a real quiet: nothing in the graph is owed, "
-            "no post is unanswered, and no paper you have read is waiting for its note."
+            "no post is unanswered, no audua session is unseen, and no paper you have read "
+            "is waiting for its note."
             if not failures else
             "Note that some sources did not answer — " + "; ".join(failures)))
 

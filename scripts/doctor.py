@@ -81,6 +81,16 @@ def c_posts():
     return OK, f"{len(ps)} post(s), latest {max(p['date'] for p in ps)} (read-only)"
 
 
+def c_audua():
+    from eliciterlib import audua
+    sessions = audua.sessions()
+    if not sessions:
+        return MEH, f"{config.audua_root()} — no session had a summary.md"
+    unseen = len(sessions) - len(audua.seen())
+    return OK, (f"{len(sessions)} session(s), latest {sessions[0]['date']}, "
+                f"~{max(unseen, 0)} unseen (read-only)")
+
+
 def c_profile():
     from eliciterlib import arxiv
     prof = arxiv.build_profile(None, log=lambda *_: None)
@@ -119,8 +129,8 @@ def main():
     print("eliciter preflight\n")
     checks = [("config", c_config), ("indexia graph", c_graph),
               ("read-only gate", c_gate), ("indexia moves", c_moves),
-              ("perceptua posts", c_posts), ("interest profile", c_profile),
-              ("reading queue", c_queue)]
+              ("perceptua posts", c_posts), ("audua sessions", c_audua),
+              ("interest profile", c_profile), ("reading queue", c_queue)]
     if not a.no_network:
         checks.append(("arxiv", c_arxiv))
 

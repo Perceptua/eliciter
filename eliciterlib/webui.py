@@ -43,7 +43,7 @@ import urllib.parse
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import arxiv, config, corpus, posts, prompts, render, status
+from . import arxiv, audua, config, corpus, posts, prompts, render, status
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE = os.path.join(HERE, "ui.html")
@@ -108,7 +108,12 @@ def run_elicit():
             signals += posts.signals(profile=_profile(db), log=lambda *_: None)
         except SystemExit:
             pass
+        try:
+            signals += audua.signals(log=lambda *_: None)
+        except SystemExit:
+            pass
         built = prompts.build(signals, limit=config.i("ELICITER_MAX_PROMPTS"))
+        audua.mark_seen(built)          # same rule as the CLI: only what actually rendered
         text = render.render(built, stats={"sources": {}})
         idx = render.index(built)
         # Both files, same as the CLI writes: the dated one is the history, `latest.md` is

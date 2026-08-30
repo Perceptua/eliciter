@@ -18,12 +18,15 @@ REGISTERS = ("note", "verse", "essay", "journal")
 LENGTH = {"note": "short", "verse": "short", "essay": "long", "journal": "long"}
 
 # Source order, and it is the *first* thing a run is sorted by — above length, above
-# register. Your own material leads: the graph first, then the posts, and the papers last.
-# The reasoning is that indexia and perceptua prompts are about work only you can continue,
-# while a paper prompt is available to anyone who read the paper; when a run is long enough
-# that you only get through the top of it, the part that should survive is the part nobody
-# else could write. Length grouping still happens, but *within* a source now.
-SOURCES = ("indexia", "perceptua", "arxiv")
+# register. Your own material leads: the graph first, then the posts, then audua, and the
+# papers last. The reasoning is that indexia, perceptua and audua prompts are about work
+# only you can continue, while a paper prompt is available to anyone who read the paper;
+# when a run is long enough that you only get through the top of it, the part that should
+# survive is the part nobody else could write. audua comes after perceptua: a poem already
+# published is finished material asking for a reply, where an audua session is still raw
+# and unreviewed — the graph's and perceptua's unfinished business outrank it. Length
+# grouping still happens, but *within* a source now.
+SOURCES = ("indexia", "perceptua", "audua", "arxiv")
 
 
 def source_rank(source):

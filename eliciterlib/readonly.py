@@ -1,7 +1,8 @@
 """The read-only gate. Every source in this project is reached through here.
 
-eliciter reads two corpora it does not own — the indexia graph and the perceptua posts —
-and it must not be able to change either. "Must not" is enforced by code in this module
+eliciter reads corpora it does not own — the indexia graph, the perceptua posts, and
+audua's transcript output — and it must not be able to change any of them. "Must not" is
+enforced by code in this module
 rather than by discipline elsewhere: the rest of the project has no access to a writable
 handle, because the gated objects never expose one.
 
@@ -131,6 +132,17 @@ class ReadOnlyDir:
         return sorted(n for n in os.listdir(self._root)
                       if os.path.isfile(os.path.join(self._root, n)))
 
+    def dirs(self):
+        """Subdirectory names directly inside the directory, sorted. No recursion.
+
+        For a source laid out one subdirectory per item — audua's `YYMMDD_NNNN` session
+        folders — this is how a caller enumerates them; `read()` already accepts a relative
+        path into one (`read("260819_0002/summary.md")`), since `_resolve` only requires the
+        result stay under `root`, not that it be a direct child.
+        """
+        return sorted(n for n in os.listdir(self._root)
+                      if os.path.isdir(os.path.join(self._root, n)))
+
     def read(self, name):
         with open(self._resolve(name), encoding="utf-8") as fh:
             return fh.read()
@@ -149,4 +161,9 @@ def graph():
 
 def posts_dir(path):
     """The gated perceptua handle. The only way this project reaches the posts."""
+    return ReadOnlyDir(path)
+
+
+def audua_dir(path):
+    """The gated audua handle. The only way this project reaches the transcript output."""
     return ReadOnlyDir(path)
