@@ -4,11 +4,11 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-.PHONY: help ui ui-up ui-down ui-status ui-restart doctor test digest queue elicit write clean
+.PHONY: help ui ui-up ui-down ui-status ui-restart doctor test sweep queue gather prompts write clean
 
 help:              ## show this help
 	@grep -hE '^[a-z-]+:.*?##' $(MAKEFILE_LIST) \
-	  | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1;36m%-10s\033[0m %s\n", $$1, $$2}'
+	  | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1;36m%-12s\033[0m %s\n", $$1, $$2}'
 
 ui:                ## serve the UI in the foreground at http://127.0.0.1:8473 (Ctrl-C to stop)
 	@bash scripts/ui.sh run
@@ -30,14 +30,17 @@ doctor:            ## check every source is readable, and read-only
 test:              ## run the tests (the read-only gate must never regress)
 	@bash scripts/test.sh
 
-digest:            ## sweep arxiv and top up the reading queue
-	@bash scripts/arxiv-digest.sh
+sweep:             ## sweep arxiv into state/candidates.json (then ask a session to pick)
+	@bash scripts/sweep.sh fetch
 
 queue:             ## show what is waiting to be read
 	@bash scripts/papers.sh
 
-elicit:            ## render writing prompts from every source
-	@bash scripts/elicit.sh
+gather:            ## read every source into state/material.json (the skill does this for you)
+	@bash scripts/gather.sh
+
+prompts:           ## validate + render the prompts a session wrote
+	@bash scripts/prompts.sh render
 
 write:             ## list prompts on offer (then: scripts/write.sh <n>)
 	@bash scripts/write.sh

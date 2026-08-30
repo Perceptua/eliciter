@@ -104,9 +104,61 @@ def c_queue():
     from eliciterlib import status
     q = status.Queue()
     if not q.papers:
-        return MEH, "empty — run scripts/arxiv-digest.sh"
+        return MEH, "empty — run scripts/sweep.sh fetch, then ask a session to pick"
     return OK, (f"{len(q.active())} waiting, {len(q.by_status('read'))} read, "
                 f"{len(q.by_status('rejected'))} rejected")
+
+
+def c_material():
+    """Is there fresh material for a session to read, and how old is it?
+
+    Worth a check of its own now that prompts are written by a session rather than by a
+    rule: "no prompts" and "no material" look identical from the prompts file, and only one
+    of them is fixed by asking for prompts.
+
+    Age is reported but is not a fault. Nothing re-gathers on a schedule — the skill
+    gathers as its first step every time it is asked for prompts — so an old snapshot only
+    means you have not asked recently, which is the intended resting state.
+    """
+    from datetime import datetime, timezone
+    from eliciterlib import material
+    try:
+        data = material.load()
+    except SystemExit as e:
+        return MEH, str(e)
+    counts = material.summarize(data)
+    body = " · ".join(f"{k} {v}" for k, v in counts.items() if v)
+    when = data.get("generated_at") or ""
+    age_h = None
+    try:
+        age_h = (datetime.now(timezone.utc)
+                 - datetime.fromisoformat(when)).total_seconds() / 3600
+    except ValueError:
+        pass
+    stamp = f"gathered {when[:16].replace('T', ' ')}Z" if when else "no timestamp"
+    if data.get("unavailable"):
+        missing = ", ".join(data["unavailable"])
+        return MEH, f"{stamp}, but {missing} was unreachable — re-run scripts/gather.sh"
+    if age_h is not None and age_h > 36:
+        return OK, f"{stamp} — {int(age_h // 24)}d old; the skill re-gathers when you ask"
+    return OK, f"{stamp} · {body}"
+
+
+def c_candidates():
+    """Is there an unpicked sweep sitting there?
+
+    A sweep is two steps now — fetch, then a session picks — so it is possible to leave a
+    week fetched and unread, which looks from the queue exactly like not having swept.
+    Never a fault: no candidates at all is the normal resting state between weeks.
+    """
+    from eliciterlib import candidates
+    try:
+        data = candidates.load()
+    except SystemExit:
+        return OK, "none held — sweep with scripts/sweep.sh fetch"
+    when = (data.get("generated_at") or "")[:16].replace("T", " ")
+    return OK, (f"{len(data.get('candidates') or [])} held from {data.get('swept')} swept "
+                f"({when}Z) · {data.get('free_slots')} free queue slot(s)")
 
 
 def c_arxiv():
@@ -130,7 +182,8 @@ def main():
     checks = [("config", c_config), ("indexia graph", c_graph),
               ("read-only gate", c_gate), ("indexia moves", c_moves),
               ("perceptua posts", c_posts), ("audua sessions", c_audua),
-              ("interest profile", c_profile), ("reading queue", c_queue)]
+              ("interest profile", c_profile), ("reading queue", c_queue),
+              ("material", c_material), ("sweep candidates", c_candidates)]
     if not a.no_network:
         checks.append(("arxiv", c_arxiv))
 

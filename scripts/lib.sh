@@ -61,6 +61,15 @@ daemon_pid() {
 
 daemon_running() { daemon_pid "$@" >/dev/null 2>&1; }
 
+# The command line a running daemon was actually started with, space-separated.
+#
+# Worth having because the alternative is guessing. A wrapper that reports where a daemon
+# is by looking at the flags of the command *asking* the question will confidently name a
+# port nothing is listening on the moment the two differ — `ui.sh status` said
+# `http://127.0.0.1:8473/` about a daemon started with `--port 8474`. What the process was
+# told at launch is the only thing that answers that, and /proc has it.
+daemon_cmdline() { tr '\0' ' ' <"/proc/$1/cmdline" 2>/dev/null || true; }
+
 daemon_write_pid() {
   mkdir -p "$PID_DIR"
   printf '%s\n' "$2" >"$(daemon_pidfile "$1")"

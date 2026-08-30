@@ -17,11 +17,11 @@ but unlike arxiv there is no per-item "read" action to hang persistence on — n
 going to click through forty transcripts one at a time to mark them. So instead of a status
 you set, `state/audua.json` just remembers which sessions have already been *offered*: once
 a session has appeared in a rendered run, it does not come back. `mark_seen()` is the write
-side of that, and it is called by the orchestrator (`scripts/elicit.py`, `webui.run_elicit`)
-once `prompts.build()` has decided what actually made the final, limited list — not by
-`signals()` itself, which stays a pure read like every other source. A session emitted as a
-candidate but crowded out by the per-run limit is *not* marked, and is offered again next
-run; a session that actually made it into a rendered file is retired for good. That is the
+side of that, and it is called by `scripts/prompts.py render`
+at the moment a rendered run is actually written — not by `signals()` itself, which stays a
+pure read like every other source, and not by the gather. A session that a Claude session
+read and did not write a prompt about is *not* marked, and is offered again next run; a
+session that made it into `prompts/latest.md` is retired for good. That is the
 correct side to be wrong on: silently losing a session because a busier run outscored it
 would be worse than occasionally seeing one twice.
 
@@ -86,19 +86,29 @@ def seen():
 
 
 def mark_seen(prompts):
-    """Persist that these audua-sourced prompts were offered, so they never resurface.
+    """Persist that these prompts' audua sessions were offered, so they never resurface.
 
-    Called by the orchestrator, after `prompts.build()` — see the module docstring for why
-    this is not done inside `signals()`.
+    `prompts` is the validated prompt list from `render.validate` — each prompt carries a
+    `sources` list of `{source, ref}`, and every audua ref in it is retired. A prompt that
+    draws on a recording *and* two notes retires the recording: it was offered, whatever
+    else was in the room.
+
+    Called by `scripts/prompts.py render`, at the moment `prompts/latest.md` is actually
+    written — not by `signals()`, which stays a pure read, and not at gather time. See the
+    module docstring: a gather you ran to see what was there must not burn the queue.
+
+    Returns how many sessions this retired.
     """
-    stems = {p.signal.ref for p in prompts if p.signal.source == "audua"}
+    stems = {s.get("ref") for p in prompts for s in (p.get("sources") or [])
+             if s.get("source") == "audua" and s.get("ref")}
     if not stems:
-        return
+        return 0
     seen = _load_seen()
     now = datetime.now(timezone.utc).isoformat()
     for stem in stems:
         seen[stem] = now
     _save_seen(seen)
+    return len(stems)
 
 
 # ---- reading sessions ---------------------------------------------------------
@@ -193,7 +203,11 @@ def signals(root=None, log=print):
             # Ordering within the source is recency alone — the most recently recorded
             # unseen session is the one still fresh enough to write against.
             score=max(0.1, 1.0 - 0.1 * i),
-            meta={"session": s}))
+            # `detail` is threads-plus-intro, capped at 700 characters; `meta["text"]` is
+            # the whole summary, which is what the aggregate pass reads. An hour of
+            # transcript is the densest material in the project and themeing it on its
+            # first paragraph would waste most of it — see `themes.text_of`.
+            meta={"session": s, "text": s["summary"]}))
 
     log(f"[audua] {len(all_sessions)} session(s); {len(unseen)} unseen; {len(out)} signal(s)")
     return out
