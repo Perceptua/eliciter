@@ -47,7 +47,7 @@ def cmd_list(q, a):
     rows = active if not a.all else sorted(
         q.papers.values(), key=lambda p: (p.get("status"), -float(p.get("score") or 0)))
     if not rows:
-        print("queue is empty — run scripts/arxiv-digest.sh")
+        print("queue is empty — run scripts/sweep.sh fetch, then ask a session to pick")
         return
     for p in rows:
         st = p.get("status", "unread")

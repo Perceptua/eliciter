@@ -119,25 +119,30 @@ def signals(profile=None, log=print):
                 scored.append((sc, matched, p))
         scored.sort(key=lambda t: -t[0])
 
+    # `detail` is the salient excerpt; `meta["text"]` is the whole poem, which is what
+    # `material.py` writes into the snapshot a session reads. A theme found in the first
+    # twenty lines of a post is not a theme found in the post.
     out = []
     for sc, matched, p in scored[:MAX_SIGNALS]:
+        full = plain_text(p)
         out.append(Signal(
             source="perceptua", kind="post-response",
             title=p["title"],
-            detail=_excerpt(plain_text(p)),
+            detail=_excerpt(full),
             ref=p["file"],
             score=min(1.0, sc),
-            meta={"post": p, "matched": matched, "reason": "overlap"}))
+            meta={"post": p, "matched": matched, "reason": "overlap", "text": full}))
 
     if not out:
         p = min(posts, key=lambda p: p["date"])
+        full = plain_text(p)
         out.append(Signal(
             source="perceptua", kind="post-response",
             title=p["title"],
-            detail=_excerpt(plain_text(p)),
+            detail=_excerpt(full),
             ref=p["file"],
             score=0.3,
-            meta={"post": p, "matched": [], "reason": "earliest"}))
+            meta={"post": p, "matched": [], "reason": "earliest", "text": full}))
 
     log(f"[perceptua] {len(posts)} post(s); {len(out)} signal(s)")
     return out

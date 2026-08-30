@@ -67,14 +67,55 @@
          display:flex; justify-content:space-between; gap:.5rem; align-items:center; }
   .status-line { color:var(--dim); font-size:.82rem; margin-left:auto; }
   details summary { cursor:pointer; color:var(--dim); font-size:.85rem; }
+
+  /* --- source material, shown in place -------------------------------------
+     The material behind a prompt used to be a <details> full of a <pre>, which
+     is where a poem goes to look like a stack trace. These three rules are the
+     difference between quoting a source and displaying it: a left rule that
+     says "this is not the tool talking", the source's own line breaks kept, and
+     a reading measure rather than the full width of the card. */
+  .material { border-left:2px solid var(--line); padding:.15rem 0 .15rem .8rem;
+              margin:.5rem 0 .2rem; }
+  .material .body { white-space:pre-wrap; font-size:.87rem; line-height:1.6;
+                    max-width:64ch; color:var(--ink); margin:0; }
+  .material .body.clip { max-height:9.5rem; overflow:hidden;
+                         -webkit-mask-image:linear-gradient(#000 65%,transparent);
+                         mask-image:linear-gradient(#000 65%,transparent); }
+  .material .where { color:var(--dim); font-size:.75rem; margin-top:.45rem;
+                     font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+                     word-break:break-all; }
+  .srcline { display:flex; gap:.4rem; align-items:baseline; flex-wrap:wrap;
+             font-size:.82rem; color:var(--dim); margin:.3rem 0; }
+  /* A link that opens material, not a page. Underline on hover only, so a card
+     with four of them does not read as a link farm. */
+  .open { background:none; border:0; padding:0; font:inherit; font-size:.82rem;
+          color:var(--accent); cursor:pointer; text-align:left; }
+  .open:hover { text-decoration:underline; }
+  .conn { border-left:2px solid var(--chip); padding-left:.7rem; margin:.35rem 0; }
+  .conn .terms { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.76rem; }
+  .members { list-style:none; padding:0; margin:.4rem 0 0; }
+  .members li { border-left:2px solid var(--line); padding:.1rem 0 .1rem .7rem;
+                margin-bottom:.5rem; }
+  .members .ex { color:var(--dim); font-size:.82rem; display:block; margin-top:.1rem; }
+  .src-tag { font-size:.72rem; text-transform:uppercase; letter-spacing:.06em;
+             color:var(--dim); }
+  .cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(19rem,1fr)); gap:.7rem; }
+  .cols h2 { font-size:.85rem; text-transform:uppercase; letter-spacing:.07em;
+             color:var(--dim); margin:.2rem 0 .5rem; font-weight:600; }
+  .row { border-bottom:1px solid var(--line); padding:.45rem 0; }
+  .row:last-child { border-bottom:0; }
+  .row .t { font-weight:500; }
+  .row .p { color:var(--dim); font-size:.82rem; margin-top:.1rem; }
+  .where-line { color:var(--dim); font-size:.78rem; padding:0 1rem .8rem;
+               font-family:ui-monospace,SFMono-Regular,Menlo,monospace; word-break:break-all; }
+  .reader { white-space:pre-wrap; font-size:.88rem; line-height:1.62; padding:1rem;
+            max-height:60vh; overflow:auto; max-width:72ch; }
 </style>
 </head>
 <body>
 <header>
   <div class="bar">
     <h1>eliciter</h1>
-    <button id="sweep">Sweep arxiv</button>
-    <button id="elicit" class="primary">Elicit prompts</button>
     <input type="search" id="q" placeholder="search arxiv — words, or ti:/au:/cat:">
     <button id="go">Search</button>
     <span class="status-line" id="status"></span>
@@ -85,6 +126,7 @@
     <button data-tab="prompts" aria-selected="true">Prompts</button>
     <button data-tab="papers" aria-selected="false">Queue</button>
     <button data-tab="decided" aria-selected="false">Decided</button>
+    <button data-tab="sources" aria-selected="false">Sources</button>
     <button data-tab="search" aria-selected="false">Search</button>
   </nav>
   <section id="view"></section>
@@ -95,6 +137,21 @@
     <button onclick="document.getElementById('dlg').close()">Close</button></div>
   <div class="cmd"><span id="dlg-cmd"></span><button id="dlg-copy">Copy</button></div>
   <pre id="dlg-body"></pre>
+</dialog>
+<!-- The reader. A second dialog rather than a mode on the first one: the brief is
+     something you copy into a terminal and the material is something you read, and
+     one dialog doing both would have to hide half its own chrome each time. -->
+<dialog id="rdr">
+  <div class="dlg-head">
+    <div><strong id="rdr-title">Source</strong>
+      <div class="src-tag" id="rdr-sub"></div></div>
+    <div style="display:flex;gap:.4rem">
+      <button id="rdr-copy">Copy text</button>
+      <button onclick="document.getElementById('rdr').close()">Close</button>
+    </div>
+  </div>
+  <div class="where-line" id="rdr-where"></div>
+  <div class="reader" id="rdr-body"></div>
 </dialog>
 
 <script>
@@ -152,22 +209,127 @@ function paperCard(p, opts={}) {
     </div></article>`;
 }
 
+// --- source material, opened in place -------------------------------------
+//
+// Three ways to reach the same material, because there are three moments where you
+// want it. `materialBlock` is the excerpt the prompt already carries, rendered as
+// prose instead of as a <pre> and clipped rather than hidden behind a disclosure
+// triangle — the old <details> meant the commonest question about a prompt ("what
+// is this about?") cost a click every single time. `openSource` fetches the whole
+// thing into the reader. `sourceLink` is the button that does it, and it is the
+// same button whether it sits on a prompt, on a connection, or on a confluence
+// member, so anything the page names you can also read.
+
+function sourceLink(source, ref, label) {
+  if (!source || !ref) return "";
+  return `<button class="open" onclick="openSource('${esc(source)}','${esc(ref)}')"
+           title="open ${esc(source)} · ${esc(ref)}">${esc(label || "read it")} →</button>`;
+}
+
+function materialBlock(p) {
+  if (!p.material) return "";
+  const long = p.material.length > 420 || p.material.split("\n").length > 7;
+  return `<div class="material">
+    <p class="body${long ? " clip" : ""}">${esc(p.material)}</p>
+    ${long ? `<button class="open" onclick="
+        this.previousElementSibling.classList.toggle('clip');
+        this.textContent = this.previousElementSibling.classList.contains('clip')
+          ? 'show the rest \u2193' : 'show less \u2191';">show the rest \u2193</button>` : ""}
+  </div>`;
+}
+
+// A prompt's provenance, and the whole reason the card is worth looking at. Every entry is
+// something a session actually read and cited, so every entry opens. One source or five is
+// the same markup — a cross-source prompt is just a prompt with more of these, which is
+// what replaced the old confluence special case.
+function sourceBlock(p) {
+  const items = p.sources || [];
+  if (!items.length) return "";
+  return `<ul class="members">` + items.map(sr => `
+    <li><span class="src-tag">${esc(sr.source)}</span>
+      ${esc(sr.title || sr.ref)} ${sourceLink(sr.source, sr.ref, "read it")}
+      ${sr.why ? `<span class="ex">${esc(sr.why)}</span>` : ""}
+    </li>`).join("") + `</ul>`;
+}
+
 function promptCard(p) {
+  const sources = p.sources || [];
+  // The chip says where a prompt came from. Several sources is the interesting case, so it
+  // is named as such rather than listed — the openable list below says which.
+  const origin = sources.length > 1
+    ? `${sources.length} sources`
+    : (sources[0] ? sources[0].source : "");
   return `<article class="card">
     <h3>${p.n}. ${esc(p.title)}</h3>
     <div class="meta">
       <span class="chip">${esc(p.length)} form</span>
       <span class="chip">${esc(p.register)} · ${esc(p.form)}</span>
-      <span class="chip">${esc(p.source)}</span>
+      ${origin ? `<span class="chip">${esc(origin)}</span>` : ""}
       <span>→ ${esc(p.project)}</span>
-      ${p.ref ? `<span class="chip">${esc(p.ref)}</span>` : ""}
     </div>
     <p style="margin:.5rem 0 .2rem"><strong>${esc(p.ask)}</strong></p>
     ${p.because ? `<p class="abs open" style="margin-top:.2rem">${esc(p.because)}</p>` : ""}
-    ${p.detail ? `<details style="margin-top:.4rem"><summary>the material</summary>
-       <pre style="padding:.6rem 0 0">${esc(p.detail)}</pre></details>` : ""}
-    <div class="actions"><button onclick="showBrief(${p.n})">Write this →</button></div>
+    ${sourceBlock(p)}
+    ${materialBlock(p)}
+    ${p.commit ? `<p class="meta" style="margin-top:.5rem">→ ${esc(p.commit)}</p>` : ""}
+    <div class="actions">
+      <button onclick="showBrief(${p.n})">Write this →</button>
+    </div>
   </article>`;
+}
+
+async function openSource(source, ref) {
+  try {
+    const d = await api(`/api/source?source=${encodeURIComponent(source)}&ref=${encodeURIComponent(ref)}`);
+    $("#rdr-title").textContent = d.title || ref;
+    $("#rdr-sub").textContent = d.subtitle || source;
+    $("#rdr-where").textContent = d.where || "";
+    $("#rdr-body").textContent = d.body || "(no text)";
+    $("#rdr-body").scrollTop = 0;
+    $("#rdr-copy").onclick = async () => {
+      await navigator.clipboard.writeText(d.body || "");
+      toast("copied");
+    };
+    $("#rdr").showModal();
+  } catch (e) { toast(e.message, 4000); }
+}
+
+// The catalogue behind the Sources tab. Fetched on demand rather than folded into
+// /api/state, which polls: reading every post and transcript off disk three times a
+// minute to keep a tab warm that may never be opened is the wrong trade.
+let sources = null;
+async function loadSources(force) {
+  if (sources && !force) return sources;
+  sources = await api("/api/sources");
+  return sources;
+}
+
+function sourceRows(items, source, extra) {
+  if (!items.length) return `<p class="meta">nothing here</p>`;
+  return items.map(it => `<div class="row">
+    <div class="t">${sourceLink(source, it.ref, it.title || it.ref)}</div>
+    <div class="p">${esc(it.date || "")}${extra ? " · " + extra(it) : ""}</div>
+    ${it.preview ? `<div class="p">${esc(it.preview)}</div>` : ""}
+  </div>`).join("");
+}
+
+function sourcesView() {
+  if (!sources) return `<div class="empty">Reading your sources…</div>`;
+  const S_ = sources, err = S_.errors || {};
+  const col = (name, title, body) => `<section class="card"><h2>${title}</h2>
+    ${err[name] ? `<p class="meta no">unavailable — ${esc(err[name])}</p>` : ""}
+    ${body}</section>`;
+  return `<div class="cols">
+    ${col("notes", "indexia — recent notes", sourceRows(S_.notes || [], "indexia",
+        it => esc(it.source_ref || "")))}
+    ${col("posts", "perceptua — posts", sourceRows(S_.posts || [], "perceptua",
+        it => (it.categories || []).join(", ")))}
+    ${col("sessions", "audua — recordings", sourceRows(S_.sessions || [], "audua",
+        it => (it.threads ? "threads left open" : "") +
+              (it.seen ? (it.threads ? " · " : "") + "already offered" : "")))}
+    ${col("papers", "arxiv — the queue", sourceRows(S_.papers || [], "arxiv",
+        it => esc(it.status || "")))}
+  </div>`;
 }
 
 function paint() {
@@ -175,18 +337,31 @@ function paint() {
   if (tab === "prompts") {
     v.innerHTML = S.prompts.length
       ? S.prompts.map(promptCard).join("")
-      : `<div class="empty">No prompts yet. Hit <strong>Elicit prompts</strong>.</div>`;
+      // Prompts are written by a Claude session that has read state/material.json, so the
+      // empty state is instructions rather than a button — the page cannot start a session
+      // any more than it can start the writing one. Both hand over a command instead.
+      : `<div class="empty">No prompts yet.<br><br>
+           <code>bash scripts/gather.sh</code> reads your sources (cron does this each
+           morning),<br>then open a session in <code>~/eliciter</code> and ask for prompts.
+           <br><br>They appear here as soon as the session renders them.</div>`;
   } else if (tab === "papers") {
     const u = S.papers.unread;
     v.innerHTML = (u.length
       ? `<p class="meta" style="margin:0 0 .7rem">${u.length} waiting · cap ${S.papers.cap}</p>`
         + u.map(p => paperCard(p, {queue:true})).join("")
-      : `<div class="empty">Queue is empty. Hit <strong>Sweep arxiv</strong>.</div>`);
+      // Which papers are worth queuing is a session's judgement now, over the whole week
+      // rather than the top ten by term overlap — so this is instructions, like the
+      // prompts tab. Search still adds by hand: asking for a paper by name is a decision.
+      : `<div class="empty">Queue is empty.<br><br>
+           <code>bash scripts/sweep.sh fetch</code> pulls the week, then ask a session
+           to pick — <br>or find a specific paper in <strong>Search</strong> and add it.</div>`);
   } else if (tab === "decided") {
     const d = [...S.papers.read, ...S.papers.rejected];
     v.innerHTML = d.length
       ? d.map(p => paperCard(p, {decided:true})).join("")
       : `<div class="empty">Nothing decided yet.</div>`;
+  } else if (tab === "sources") {
+    v.innerHTML = sourcesView();
   } else {
     v.innerHTML = searchResults.length
       ? searchResults.map(p => paperCard(p, {search:true})).join("")
@@ -200,6 +375,13 @@ function show(name) {
   document.querySelectorAll("#tabs button").forEach(b =>
     b.setAttribute("aria-selected", String(b.dataset.tab === name)));
   paint();
+  // Painted first, then filled: the catalogue is a disk read of every post and every
+  // transcript, and blocking the tab switch on it would make Sources feel broken on the
+  // first click even though it is working.
+  if (name === "sources") {
+    loadSources().then(() => { if (tab === "sources") paint(); })
+                 .catch(e => toast(e.message, 4000));
+  }
 }
 
 async function mark(id, status) {
@@ -228,19 +410,6 @@ async function showBrief(n) {
 }
 
 $("#tabs").onclick = e => { if (e.target.dataset.tab) show(e.target.dataset.tab); };
-$("#sweep").onclick = async () => {
-  setBusy(true, "sweeping arxiv…");
-  try { const r = await api("/api/sweep", {method:"POST"});
-        await refresh(); show("papers");
-        toast(`swept ${r.swept}, ${r.matched} matched, ${r.added} added — ${r.waiting} waiting`); }
-  catch (e) { toast(e.message, 5000); } finally { setBusy(false); }
-};
-$("#elicit").onclick = async () => {
-  setBusy(true, "eliciting…");
-  try { const r = await api("/api/elicit", {method:"POST"});
-        await refresh(); show("prompts"); toast(`${r.count} prompt(s)`); }
-  catch (e) { toast(e.message, 5000); } finally { setBusy(false); }
-};
 async function doSearch() {
   const q = $("#q").value.trim();
   if (!q) return;

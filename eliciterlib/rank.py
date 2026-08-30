@@ -23,6 +23,12 @@ import re
 # Common English plus academic-abstract boilerplate. These carry no signal about what a
 # paper is *about*, and left in they dominate the overlap — every abstract "presents a
 # novel approach" and would score alike.
+#
+# The last two lines were added 2026-08-30, after the perceptua prompts started reporting
+# a poem as matching on `whose`, `too` and `because`. That is a real overlap and a useless
+# one, and it was visible because `because` lines *name* the matched terms — the legibility
+# `rank.py` was built for catching a defect in `rank.py`. Nothing here is subject matter in
+# any source, so removing them only ever takes noise out of a score.
 STOPWORDS = frozenset("""
 a an and are as at be been but by can could do does for from had has have how i if in into is it
 its may might must no not of on or our should so than that the their then there these they this
@@ -31,6 +37,15 @@ paper papers show shows study studies result results method methods approach app
 proposed present presents using use used new novel model models work works based via framework
 task tasks data datasets experiments experimental performance state art also however first second
 one two three both each also many much well often within without under over between across
+after against all am another any anything because been before being below beyond does done
+during either else enough even ever every everything far few further get give go had having
+here him his her hers hence i'm into itself just least less let like little made make many
+me mine my nor now off once only onto or others out own per rather same she since some
+someone something still such take than themselves therefore thing things those though
+through thus too toward towards until upon very via what whatever when where whereas
+whether which while who whom whose why yet you your yours nothing anyone nobody everyone
+cannot them their theirs him himself herself myself ourselves yourself itself was wasn't
+isn't don't doesn't didn't won't can't couldn't wouldn't shouldn't it's that's there's
 """.split())
 
 WORD_RE = re.compile(r"[a-z][a-z0-9\-]{2,}")
@@ -115,6 +130,35 @@ class Profile:
 
     def items(self):
         return self.weights.items()
+
+
+def overlap(text, prof):
+    """→ (score, matched terms), **with no interest gate**. Ordering, not judgement.
+
+    `score()` below refuses anything that matches no stated interest, and that gate is
+    right when term overlap is the *only* filter — it is what stops a payments-protocol
+    paper reaching the queue on eight generic hits. It is wrong when a reader is the second
+    stage. Measured on one real week: 1160 papers swept, 518 past the gate. Whatever was in
+    the other 642, no human ever saw it, and "shares no vocabulary with your stated
+    interests" is not the same fact as "is not for you" — a paper on regeneration in
+    planaria need never say `morphogenesis`.
+
+    So this is the ordering function for a shortlist a session will actually read: every
+    paper keeps a score, nothing is dropped, and the score is a hint about where to look
+    first rather than a verdict about what exists.
+    """
+    seen = set(terms(text))
+    if not seen or not prof:
+        return 0.0, []
+    matched = sorted((w for w in seen if w in prof.weights), key=lambda w: -prof.weights[w])
+    if not matched:
+        return 0.0, []
+    total = sum(prof.weights[w] for w in matched)
+    total -= EXCLUDE_WEIGHT * len(seen & prof.banned)
+    # Exclusions can drive this negative, and a negative is meaningful here where it was
+    # not before: it says the paper is *about* something you ruled out. Kept rather than
+    # zeroed so the ordering puts it below a paper that merely matched nothing.
+    return total / math.sqrt(len(seen)), matched
 
 
 def score(text, prof):

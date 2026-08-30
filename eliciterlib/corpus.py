@@ -13,6 +13,8 @@ and the handle it holds has no method that writes — see `eliciterlib/readonly.
 themselves are reads (`Corpus` and every `moveN_candidates` only call `db.query`), which is
 why passing them a gated handle works at all.
 """
+import re
+
 import notelib
 from analytics import common, debt
 
@@ -45,6 +47,73 @@ def all_notes(db):
         "SELECT id, title, body FROM Note WHERE status = 'active'"))
 
 
+# Note ids are indexia spec §4 timestamps — `20260807T194938347Z`. Nothing else in a
+# signal's meta looks like one, which is what makes the scrape in `_attach_text` below
+# safe to run over arbitrary move output without knowing each move's shape.
+NOTE_ID_RE = re.compile(r"\b\d{8}T\d{9}Z\b")
+
+
+def bodies(db, ids):
+    """→ {id: "title\n\nbody"} for the given note ids, in one query.
+
+    The moves return *labels* — a title, sometimes a snippet — because that is all a
+    provocation digest needs to print. A session reading `state/material.json` needs the
+    actual prose, or it is judging four notes by their titles. This is
+    the one extra read that buys that, and it is a read: `db` is the gated handle and the
+    statement is a SELECT, so it goes through `readonly.assert_read_only` like every other.
+    """
+    ids = [i for i in dict.fromkeys(ids) if NOTE_ID_RE.fullmatch(str(i))]
+    if not ids:
+        return {}
+    # Ids are format-checked against NOTE_ID_RE above, so they cannot carry a quote — but
+    # they are still interpolated rather than parameterized because notelib's query takes
+    # params positionally and the moves themselves build IN-lists the same way.
+    listed = ", ".join(f"'{i}'" for i in ids)
+    rows = notelib.rows(db.query(
+        f"SELECT id, title, body FROM Note WHERE id IN [{listed}]"))
+    return {r.get("id"): f"{r.get('title') or ''}\n\n{r.get('body') or ''}".strip()
+            for r in rows}
+
+
+def note(db, note_id):
+    """One note in full, for the UI's source reader — or None if there is no such id.
+
+    The UI shows a prompt's material as an excerpt and then offers to open the whole
+    thing; for an indexia prompt "the whole thing" is the note itself, which no other read
+    in this module returns (the moves return labels, `recent_notes` returns a window).
+    """
+    if not NOTE_ID_RE.fullmatch(str(note_id or "")):
+        return None
+    rows = notelib.rows(db.query(
+        "SELECT id, title, body, created_at, source_ref, status FROM Note "
+        f"WHERE id = '{note_id}'"))
+    return rows[0] if rows else None
+
+
+def _attach_text(db, out):
+    """Give every signal the full prose of the notes it is about, as `meta["text"]`.
+
+    Done once for the whole batch rather than inside each move: the moves stay as thin as
+    they are, and four moves that each mention the same note cost one query between them
+    instead of four. A failure here is not fatal — the signals are still perfectly good
+    prompts, they are just themed on their titles alone.
+    """
+    wanted = {}
+    for s in out:
+        found = set(NOTE_ID_RE.findall(f"{s.ref} {s.detail} {s.meta}"))
+        if found:
+            wanted[id(s)] = found
+    every = sorted({i for ids in wanted.values() for i in ids})
+    if not every:
+        return out
+    text = bodies(db, every)
+    for s in out:
+        got = [text[i] for i in sorted(wanted.get(id(s), ())) if i in text]
+        if got:
+            s.meta["text"] = "\n\n".join(got)
+    return out
+
+
 def signals(db, log=print):
     """Moves 4–7, as Signals. A move that finds nothing contributes nothing; a move that
     raises is reported and skipped, so one failing move cannot take down a run."""
@@ -59,6 +128,10 @@ def signals(db, log=print):
             raise                                   # a gate breach is never "just skip it"
         except Exception as e:                      # noqa: BLE001 — one move must not sink the run
             log(f"[indexia] {name}: skipped ({type(e).__name__}: {e})")
+    try:
+        _attach_text(db, out)
+    except Exception as e:                          # noqa: BLE001
+        log(f"[indexia] note bodies unavailable ({type(e).__name__}: {e})")
     return out
 
 

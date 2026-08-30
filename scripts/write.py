@@ -38,7 +38,8 @@ PROJECT_DIRS = {
 def load_prompts():
     path = os.path.join(config.out_dir("state"), "prompts.json")
     if not os.path.isfile(path):
-        raise SystemExit("no prompts yet — run scripts/elicit.sh first")
+        raise SystemExit(
+            "no prompts yet — `bash scripts/gather.sh`, then ask a session for prompts")
     with open(path, encoding="utf-8") as fh:
         return json.load(fh).get("prompts", [])
 
@@ -46,9 +47,14 @@ def load_prompts():
 def seed_text(p):
     """What the new session is told. Deliberately a brief, not a draft.
 
-    It states the ask, the material, and where the result goes, and stops. eliciter does not
-    write the thing and does not suggest what it should say — that boundary is the point of
-    the project, and it would be odd to hold it everywhere except at the moment of handoff.
+    It states the ask, the material it came from, and where the result goes, and stops.
+    eliciter does not write the thing and does not suggest what it should say — that
+    boundary is the point of the project, and it would be odd to hold it everywhere except
+    at the moment of handoff.
+
+    The prompt itself was written by a session that had read the whole corpus; this one has
+    not, so every source is named with its ref and the session is told to go and read them.
+    A prompt that draws on three things is not summarized down to one here.
     """
     lines = [
         f"I want to write this. It came from eliciter (prompt {p['n']}).",
@@ -56,14 +62,29 @@ def seed_text(p):
         f"**{p['ask']}**",
         "",
         f"- form: {p['form']} ({p['length']} form)",
-        f"- source: {p['source']} · `{p['ref']}`",
     ]
     if p.get("because"):
         lines += [f"- why it surfaced: {p['because']}"]
     if p.get("commit"):
         lines += [f"- where it goes: {p['commit']}"]
-    if p.get("detail"):
-        lines += ["", f"The material — {p['title']}:", "", "```", p["detail"].strip(), "```"]
+
+    sources = p.get("sources") or []
+    if sources:
+        lines += ["", "What it draws on — read these before drafting:", ""]
+        for srec in sources:
+            line = f"- **{srec.get('title') or srec.get('ref')}** " \
+                   f"({srec.get('source', '')} · `{srec.get('ref', '')}`)"
+            if srec.get("why"):
+                line += f" — {srec['why']}"
+            lines += [line]
+        lines += ["",
+                  "You can read any of them from this repo: notes are in indexia, posts in "
+                  "perceptua/_posts, recordings in audua's output as summary.md, papers on "
+                  "arxiv. eliciter reads all of them read-only."]
+
+    if p.get("material"):
+        lines += ["", "The part that prompted it:", "", "```", p["material"].strip(), "```"]
+
     lines += [
         "",
         "Help me write it here. eliciter gathered this read-only and cannot commit "
@@ -106,7 +127,7 @@ def main():
     prompts = load_prompts()
     if a.target is None:
         if not prompts:
-            print("no prompts — run scripts/elicit.sh")
+            print("no prompts — gather, then ask a session for them")
             return 0
         print("on offer:\n")
         for p_ in prompts:

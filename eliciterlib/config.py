@@ -35,7 +35,6 @@ DEFAULTS = {
         "self-organization, active inference, developmental biology, cognitive boundaries"),
     "ELICITER_EXCLUDE": ("benchmark, leaderboard, refactor, payment, vulnerability, "
                          "malware, software engineering, code generation"),
-    "ELICITER_MAX_PROMPTS": "7",
     # 8473 deliberately: 8420 is indexia's UI, and 8080/8765 are asked to stay free.
     "ELICITER_UI_PORT": "8473",
 }
