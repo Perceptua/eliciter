@@ -1,12 +1,14 @@
 """Source — the indexia graph, read through the gate.
 
-indexia already knows what is unfinished in its own corpus: seven generativity moves, six
-in `notelib` and move 7 in `analytics/debt.py`. eliciter calls them rather than
-reimplementing them, and turns their output into Signals.
+indexia already knows what is unfinished in its own corpus: six generativity moves, five
+in `notelib` and move 6 in `analytics/debt.py`. (indexia dropped the old move 2 —
+temporally-adjacent, graph-far — on 2026-09-05, renumbering everything after it down by
+one; see indexia commit c271909.) eliciter calls them rather than reimplementing them, and
+turns their output into Signals.
 
 The division of labour: **indexia's digest proposes links, eliciter proposes writing.** So
-moves 1–3 are ignored here — their output is a bind, and a bind is a judgement, not an
-essay. Moves 4–7 all end in "you should write something", and those are the four this reads.
+moves 1–2 are ignored here — their output is a bind, and a bind is a judgement, not an
+essay. Moves 3–6 all end in "you should write something", and those are the four this reads.
 
 Everything goes through `readonly.graph()`. This module never constructs a `notelib.Arcade`,
 and the handle it holds has no method that writes — see `eliciterlib/readonly.py`. The moves
@@ -115,11 +117,11 @@ def _attach_text(db, out):
 
 
 def signals(db, log=print):
-    """Moves 4–7, as Signals. A move that finds nothing contributes nothing; a move that
+    """Moves 3–6, as Signals. A move that finds nothing contributes nothing; a move that
     raises is reported and skipped, so one failing move cannot take down a run."""
     out = []
-    for name, fn in (("move4", _move4), ("move5", _move5),
-                     ("move6", _move6), ("move7", _move7)):
+    for name, fn in (("move3", _move3), ("move4", _move4),
+                     ("move5", _move5), ("move6", _move6)):
         try:
             found = fn(db)
             out.extend(found)
@@ -135,16 +137,16 @@ def signals(db, log=print):
     return out
 
 
-def _move4(db):
+def _move3(db):
     """Implicit theme with no hub note → write the hub."""
     out = []
-    for theme in notelib.move4_candidates(db, min_theme=MIN_THEME) or []:
+    for theme in notelib.move3_candidates(db, min_theme=MIN_THEME) or []:
         members = theme.get("members") or []
         if len(members) < MIN_THEME:
             continue
         listed = "\n".join(f"  - `{m.get('id')}` · {_title(m)}" for m in members)
         out.append(Signal(
-            source="indexia", kind="move4",
+            source="indexia", kind="move3",
             title=f"{len(members)} notes circling one unnamed idea",
             detail=listed,
             ref=str(theme.get("seed") or (members[0].get("id") if members else "")),
@@ -155,7 +157,7 @@ def _move4(db):
     return out
 
 
-def _move5(db):
+def _move4(db):
     """A ratified `inhibits` pair → write the reconciliation.
 
     The edge points from the correction to what it corrects, so `new` is what you think
@@ -163,11 +165,11 @@ def _move5(db):
     which is exactly why the pair is worth an essay rather than a deletion.
     """
     out = []
-    for pair in notelib.move5_candidates(db) or []:
+    for pair in notelib.move4_candidates(db) or []:
         new_t = pair.get("new_title") or "(untitled)"
         old_t = pair.get("old_title") or "(untitled)"
         out.append(Signal(
-            source="indexia", kind="move5",
+            source="indexia", kind="move4",
             title=f"{new_t} ⟂ {old_t}",
             detail=(f"  - now: `{pair.get('new')}` · {new_t}\n"
                     f"    {pair.get('new_snippet') or ''}\n"
@@ -182,13 +184,24 @@ def _move5(db):
     return out
 
 
-def _move6(db):
-    """Re-encounter: orphans want the next note; an anniversary wants a dated entry."""
+def _move5(db):
+    """Re-encounter: orphans and inhibited notes want the next note; an anniversary wants
+    a dated entry.
+
+    indexia added the `inhibited` bucket alongside `orphans`/`on_this_day` on 2026-09-05
+    (indexia commit c271909) — a note something has since corrected is still corpus (spec
+    §6) and just as worth a re-encounter as one nothing has ever linked to.
+    """
     out = []
-    buckets = notelib.move6_candidates(db) or {}
+    buckets = notelib.move5_candidates(db) or {}
     for n in (buckets.get("orphans") or [])[:4]:
         out.append(Signal(
             source="indexia", kind="orphan",
+            title=_title(n), detail=n.get("snippet") or "",
+            ref=n.get("id") or "", score=0.5, meta={"note": n}))
+    for n in (buckets.get("inhibited") or [])[:4]:
+        out.append(Signal(
+            source="indexia", kind="inhibited",
             title=_title(n), detail=n.get("snippet") or "",
             ref=n.get("id") or "", score=0.5, meta={"note": n}))
     for n in (buckets.get("on_this_day") or [])[:2]:
@@ -199,7 +212,7 @@ def _move6(db):
     return out
 
 
-def _move7(db):
+def _move6(db):
     """Structural debt: a note the corpus grew out of that you stopped attending to."""
     out = []
     corpus = common.Corpus(db)
@@ -207,7 +220,7 @@ def _move7(db):
         # debt rows carry `label` (Corpus.label), not `title` — they are built from the
         # in-memory Corpus, not from a Note row.
         out.append(Signal(
-            source="indexia", kind="move7",
+            source="indexia", kind="move6",
             title=row.get("label") or "(untitled)",
             detail=debt.prompt(row),
             ref=row.get("id") or "",

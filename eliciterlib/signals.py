@@ -63,7 +63,7 @@ class Signal:
     as a ranking anything is obliged to honour.
 
     source      — 'indexia' | 'perceptua' | 'audua' | 'arxiv'
-    kind        — source-specific discriminator ('move4', 'orphan', 'post-response', …)
+    kind        — source-specific discriminator ('move3', 'orphan', 'post-response', …)
     title       — short human label
     detail      — the excerpt the source considers salient
     ref         — provenance a reader can follow: a note id, a post filename, an arxiv id

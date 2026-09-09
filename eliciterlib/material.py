@@ -53,8 +53,8 @@ RECENT_NOTES = 25
 # which ones `posts.signals` thought were adjacent to current reading; that is a hint, not
 # a shortlist, and the skill is free to ignore it.
 #
-# audua is the opposite: one session summary is 14KB, so only the unseen ones go in full
-# and the rest appear as a line each.
+# audua is the opposite: one session summary is 14KB, so only sessions still within the
+# recency window go in full, and the rest appear as a line each.
 MAX_SESSIONS_FULL = 4
 
 
@@ -173,19 +173,18 @@ def gather(log=print, want_papers=True, want_graph=True, want_posts=True, want_a
     if want_audua:
         def _audua():
             every = audua.sessions()
-            seen = audua.seen()
             rows = []
-            unseen_full = 0
+            recent_full = 0
             for s in every:
-                is_seen = s["stem"] in seen
+                is_recent = audua.is_recent(s["date"])
                 row = {"ref": s["stem"], "date": s["date"].isoformat(),
-                       "already_offered": is_seen,
+                       "recent": is_recent,
                        "has_open_threads": bool(s["threads"])}
-                # The whole summary only for sessions that have never been offered. A
-                # session you have already been asked about is context, not material.
-                if not is_seen and unseen_full < MAX_SESSIONS_FULL:
+                # The whole summary only for sessions still within the recency window. A
+                # session that has aged out is context, not material.
+                if is_recent and recent_full < MAX_SESSIONS_FULL:
                     row["text"] = s["summary"]
-                    unseen_full += 1
+                    recent_full += 1
                 else:
                     row["intro"] = s["intro"]
                 rows.append(row)
@@ -252,8 +251,8 @@ def summarize(data):
         "recent notes": len(notes.get("recent") or []),
         "posts": len(data.get("posts") or []),
         "sessions": len(data.get("sessions") or []),
-        "unseen sessions": sum(1 for s in (data.get("sessions") or [])
-                               if not s.get("already_offered")),
+        "recent sessions": sum(1 for s in (data.get("sessions") or [])
+                               if s.get("recent")),
         "papers read": len(papers.get("read") or []),
         "papers waiting": len(papers.get("waiting") or []),
     }
