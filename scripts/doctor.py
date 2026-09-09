@@ -86,9 +86,9 @@ def c_audua():
     sessions = audua.sessions()
     if not sessions:
         return MEH, f"{config.audua_root()} — no session had a summary.md"
-    unseen = len(sessions) - len(audua.seen())
+    recent = sum(1 for s in sessions if audua.is_recent(s["date"]))
     return OK, (f"{len(sessions)} session(s), latest {sessions[0]['date']}, "
-                f"~{max(unseen, 0)} unseen (read-only)")
+                f"{recent} within {audua.RECENT_DAYS}d (read-only)")
 
 
 def c_profile():

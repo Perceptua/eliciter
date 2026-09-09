@@ -12,27 +12,22 @@ A session is a directory under `ELICITER_AUDUA_ROOT` named `YYMMDD_NNNN` — aud
 naming, which sorts chronologically as a plain string, so no date parsing is needed to
 order sessions by recency.
 
-**Seen-once, not a queue.** audua produces new sessions indefinitely, like the arxiv sweep,
-but unlike arxiv there is no per-item "read" action to hang persistence on — nobody is
-going to click through forty transcripts one at a time to mark them. So instead of a status
-you set, `state/audua.json` just remembers which sessions have already been *offered*: once
-a session has appeared in a rendered run, it does not come back. `mark_seen()` is the write
-side of that, and it is called by `scripts/prompts.py render`
-at the moment a rendered run is actually written — not by `signals()` itself, which stays a
-pure read like every other source, and not by the gather. A session that a Claude session
-read and did not write a prompt about is *not* marked, and is offered again next run; a
-session that made it into `prompts/latest.md` is retired for good. That is the
-correct side to be wrong on: silently losing a session because a busier run outscored it
-would be worse than occasionally seeing one twice.
+**A recency window, not a queue.** audua produces new sessions indefinitely, like the arxiv
+sweep, but unlike arxiv there is no per-item "read" action to hang persistence on — nobody
+is going to click through forty transcripts one at a time to mark them. So instead of
+tracking which sessions have been offered before, a session is simply eligible while it is
+recent: anything recorded within `RECENT_DAYS` of today is fair game for a prompt, run after
+run, and drops out on its own once it ages past the window. A recording the corpus keeps
+circling can prompt more than once — that is the point, not a bug to guard against — and
+there is no state file to fall out of sync with what has actually been offered.
 
 Read-only for the same reason indexia and perceptua are: eliciter did not record this audio
 and has no business rewriting audua's output. Access is through `readonly.audua_dir()`,
 which can list and read inside `ELICITER_AUDUA_ROOT` and has no method that writes.
 """
-import json
 import os
 import re
-from datetime import date, datetime, timezone
+from datetime import date, timedelta
 
 from . import config, readonly
 from .signals import Signal
@@ -44,71 +39,13 @@ HEADING_RE = re.compile(r"^##\s+", re.MULTILINE)
 # its own stop, or "Threads left open" swallows every footnote in the summary.
 FOOTNOTE_RE = re.compile(r"^\[\^\d+\]:", re.MULTILINE)
 
-# At most this many unseen sessions become prompts in one run. An hour of transcript is
+# A session recorded within this many days of today is eligible to prompt. Older sessions
+# stay readable through `sessions()` but drop out of `signals()` on their own.
+RECENT_DAYS = 30
+
+# At most this many recent sessions become prompts in one run. An hour of transcript is
 # dense material, and — like perceptua — this source should not crowd out the reading.
 MAX_SIGNALS = 2
-
-STATE_NAME = "audua.json"
-
-
-# ---- state: which sessions have already been offered ------------------------
-
-def _state_path():
-    return os.path.join(config.out_dir("state"), STATE_NAME)
-
-
-def _load_seen():
-    path = _state_path()
-    if not os.path.isfile(path):
-        return {}
-    try:
-        with open(path, encoding="utf-8") as fh:
-            return json.load(fh).get("seen", {})
-    except (OSError, ValueError) as e:
-        raise SystemExit(f"{path} is unreadable ({e}) — move it aside to start over")
-
-
-def _save_seen(seen):
-    path = _state_path()
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump({"updated_at": datetime.now(timezone.utc).isoformat(), "seen": seen},
-                  fh, indent=2)
-    os.replace(tmp, path)          # atomic: a crash mid-write cannot corrupt the file
-    return path
-
-
-def seen():
-    """Which session stems have already been offered — the public read of `state/audua.json`,
-    for `scripts/doctor.py` and anything else that wants to inspect it without reaching into
-    the loader `signals()` and `mark_seen()` share."""
-    return _load_seen()
-
-
-def mark_seen(prompts):
-    """Persist that these prompts' audua sessions were offered, so they never resurface.
-
-    `prompts` is the validated prompt list from `render.validate` — each prompt carries a
-    `sources` list of `{source, ref}`, and every audua ref in it is retired. A prompt that
-    draws on a recording *and* two notes retires the recording: it was offered, whatever
-    else was in the room.
-
-    Called by `scripts/prompts.py render`, at the moment `prompts/latest.md` is actually
-    written — not by `signals()`, which stays a pure read, and not at gather time. See the
-    module docstring: a gather you ran to see what was there must not burn the queue.
-
-    Returns how many sessions this retired.
-    """
-    stems = {s.get("ref") for p in prompts for s in (p.get("sources") or [])
-             if s.get("source") == "audua" and s.get("ref")}
-    if not stems:
-        return 0
-    seen = _load_seen()
-    now = datetime.now(timezone.utc).isoformat()
-    for stem in stems:
-        seen[stem] = now
-    _save_seen(seen)
-    return len(stems)
 
 
 # ---- reading sessions ---------------------------------------------------------
@@ -181,27 +118,33 @@ def _detail(session):
     return _excerpt("\n\n".join(parts) or session["summary"])
 
 
+def is_recent(session_date, today=None):
+    """Whether a session recorded on `session_date` is still within the eligible window —
+    the single definition of "recent", shared by `signals()`, `material.py`, `webui.py`, and
+    `scripts/doctor.py` so they cannot disagree about which sessions are current."""
+    return (today or date.today()) - session_date <= timedelta(days=RECENT_DAYS)
+
+
 def signals(root=None, log=print):
-    """Unseen audua sessions, as Signals — the single definition, used by the CLI and the
-    web UI. A pure read; see `mark_seen()` for where the state actually changes."""
+    """Recent audua sessions, as Signals — the single definition, used by the CLI and the
+    web UI. A pure read; nothing about calling this changes what is eligible next time."""
     log = log or (lambda *_: None)
     all_sessions = sessions(root)
     if not all_sessions:
         log("[audua] no sessions found")
         return []
 
-    seen = _load_seen()
-    unseen = [s for s in all_sessions if s["stem"] not in seen]
+    recent = [s for s in all_sessions if is_recent(s["date"])]
 
     out = []
-    for i, s in enumerate(unseen[:MAX_SIGNALS]):
+    for i, s in enumerate(recent[:MAX_SIGNALS]):
         out.append(Signal(
             source="audua", kind="session",
             title=f"Audua — {s['date'].isoformat()}",
             detail=_detail(s),
             ref=s["stem"],
             # Ordering within the source is recency alone — the most recently recorded
-            # unseen session is the one still fresh enough to write against.
+            # eligible session is the one still fresh enough to write against.
             score=max(0.1, 1.0 - 0.1 * i),
             # `detail` is threads-plus-intro, capped at 700 characters; `meta["text"]` is
             # the whole summary, which is what the aggregate pass reads. An hour of
@@ -209,5 +152,6 @@ def signals(root=None, log=print):
             # first paragraph would waste most of it — see `themes.text_of`.
             meta={"session": s, "text": s["summary"]}))
 
-    log(f"[audua] {len(all_sessions)} session(s); {len(unseen)} unseen; {len(out)} signal(s)")
+    log(f"[audua] {len(all_sessions)} session(s); {len(recent)} within {RECENT_DAYS}d; "
+        f"{len(out)} signal(s)")
     return out

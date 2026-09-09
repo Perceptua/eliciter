@@ -37,19 +37,17 @@ would mean judging Friday against a corpus that has moved.
 1. **Ask before replacing a run that is still standing.** If `prompts/latest.md` exists and
    the user has not clearly asked for a fresh set — "regenerate", "new prompts", "start
    over" — show them what is currently on offer (`bash scripts/prompts.sh show`) and check
-   before going further. Rendering overwrites `prompts/latest.md`, overwrites the dated file
-   if it is the same day, and **retires every audua session the new prompts cite**. That is
-   fine when it is wanted and annoying when it is not, and prompts they have not acted on
-   yet are the whole point of the file.
+   before going further. Rendering overwrites `prompts/latest.md`, and overwrites the dated
+   file if it is the same day. That is fine when it is wanted and annoying when it is not,
+   and prompts they have not acted on yet are the whole point of the file.
 2. **Gather.** `bash scripts/gather.sh`. Always, as part of the same move. It is a read —
-   nothing is retired, nothing is decided, and it takes a couple of seconds.
+   nothing is decided, and it takes a couple of seconds.
 3. **Read `state/material.json`.** All of it. ~110KB; it is meant to be read, not grepped.
    If a source shows up under `unavailable` (the indexia container is often down), say so
    plainly rather than quietly writing a run with a corpus missing.
 4. **Write `state/prompts.json`** — schema below.
 5. **`bash scripts/prompts.sh check`** until it passes, then **`bash scripts/prompts.sh
-   render`**. Never hand-write `prompts/latest.md`; it is derived, and `render` is also what
-   retires the audua sessions you used.
+   render`**. Never hand-write `prompts/latest.md`; it is derived.
 6. Show the user the numbered list and stop. Opening one is a separate move, below.
 
 ## What is in the material
@@ -59,11 +57,11 @@ would mean judging Friday against a corpus that has moved.
 | `notes.flagged` | indexia moves 4–7: unnamed themes, ratified contradictions, orphans, anniversaries, structural debt. Each has `text` — the actual note prose, not a label. |
 | `notes.recent` | the last 25 notes in full. What they have been thinking about lately. |
 | `posts` | **every** perceptua post, full text. `adjacent_to_current_reading` is a term-overlap hint from `rank.py` — a hint, not a shortlist. Ignore it when you disagree. |
-| `sessions` | audua run recordings. Unseen ones carry the whole `summary.md`; ones already offered carry `intro` only, as context. |
+| `sessions` | audua run recordings. Ones recorded in the last 30 days (`recent: true`) carry the whole `summary.md` and are eligible to prompt; older ones carry `intro` only, as context. |
 | `papers.read` | papers marked read, with abstracts. **These are the ones that prompt.** |
 | `papers.waiting` | the unread queue — context on where their attention is going, not prompt material. |
 | `interests` / `exclude` | what they have said they care about, independent of what they have written. |
-| `previous_prompts` | **what you asked last time. Do not ask it again.** Because nothing regenerates on a schedule, a standing run may be days old — treat these as things the user has had in front of them and not yet written. |
+| `previous_prompts` | **what you asked last time.** Because nothing regenerates on a schedule, a standing run may be days old — treat these as things the user has had in front of them and not yet written. Repeating one is fine when new material genuinely connects to it (see below) — the bar is the connection, not novelty for its own sake. |
 
 ## The rule that has not changed
 
@@ -109,8 +107,13 @@ This is the judgement the old pipeline could not make. Aim for **5–7** prompts
   itself.
 - **Prefer live over structural.** A note from last week that the recordings keep circling
   beats a technically-orphaned note from June that nobody misses.
-- **Don't repeat `previous_prompts`.** If something genuinely still needs writing, ask it
-  from a different angle and say in `because` that it is still open.
+- **What matters is connecting sources, not avoiding repetition for its own sake.**
+  `previous_prompts` is context, not a blocklist. If a site you asked about before is still
+  live and new material — a note, a recording, a paper — genuinely bears on it, ask it
+  again, incorporating what's new, and say in `because` what changed since last time. What
+  you should not do is reissue the identical ask with nothing new behind it — that is
+  padding, not persistence. The judgement is the same as anywhere else in this doc: real
+  connection earns the prompt, its absence does not.
 
 ## Registers, and what routes where
 
@@ -132,9 +135,11 @@ Two standing conventions, both still true:
 - **Papers prompt once they are marked read, never while queued.** A prompt asks for the
   claim they took from something, which does not exist until they have read it. Never write
   a prompt about `papers.waiting`.
-- **An audua session is offered once.** `prompts.sh render` retires every session your
-  prompts cite. A session you read and chose not to use stays available for next time — so
-  do not cite one just to use it up.
+- **Audua sessions are eligible by recency, not by whether they've prompted before.**
+  Anything recorded in the last 30 days (`recent: true` in the material) is fair game, run
+  after run — a recording the corpus keeps circling around can prompt more than once. It
+  drops out of `material.json`'s full text (and so out of contention) on its own once it
+  ages past that window.
 
 ## The schema
 

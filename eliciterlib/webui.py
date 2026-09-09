@@ -141,7 +141,7 @@ def sources_payload():
 
     attempt("sessions", lambda: [
         {"ref": s["stem"], "title": f"Audua — {s['date'].isoformat()}",
-         "date": s["date"].isoformat(), "seen": s["stem"] in audua.seen(),
+         "date": s["date"].isoformat(), "recent": audua.is_recent(s["date"]),
          "threads": bool(s["threads"]),
          "preview": _first_lines(s["intro"] or s["summary"])}
         for s in audua.sessions()], [])

@@ -195,9 +195,10 @@ scripts/gather.sh  →  state/material.json  →  a Claude session  →  state/p
 
 `gather.sh` reaches into all four corpora through the read-only gate and writes down the
 *whole* of what is there — the note prose behind each flagged move, every post in full,
-unseen session summaries entire, the abstracts of papers you have read, your stated
-interests, and **the prompts from last time so a session does not repeat itself**. It
-scores nothing and asks nothing. Around 90KB; it is meant to be read.
+recent (last 30 days) session summaries entire, the abstracts of papers you have read, your stated
+interests, and **the prompts from last time, so a session knows what's already been asked
+and can build on it** — repeating one is fine when new material genuinely connects to it.
+It scores nothing and asks nothing. Around 90KB; it is meant to be read.
 
 The `elicit-writing` skill is where the editorial rules now live, and they are the same
 rules `prompts.py` held:
@@ -212,9 +213,10 @@ rules `prompts.py` held:
   recording is not automatically a journal entry.
 - **Papers prompt once marked read, never while queued.** A prompt asks for the claim you
   took from something, which does not exist until you have read it.
-- **audua sessions are offered at most once.** `state/audua.json` remembers which have
-  appeared in a rendered run; `prompts.sh render` is what retires them, at the moment the
-  file is actually written — a gather you ran to see what was there does not burn the queue.
+- **audua sessions are eligible by recency, not a one-shot queue.** A session recorded
+  within the last 30 days is fair game for a prompt, run after run; it ages out of
+  `material.json`'s full text — and so out of contention — on its own once it passes that
+  window. A recording the corpus keeps circling can prompt more than once.
 - **Say when there is nothing.** Four thin prompts padding a run to seven is worse than two
   good ones, and much worse than "the queue is clear and nothing is owed". There is no
   longer a target count to hit.
@@ -247,7 +249,7 @@ cannot check is that a `ref` exists — that one is on the session, and it is to
 
 ```bash
 bash scripts/prompts.sh check     # validate, write nothing
-bash scripts/prompts.sh render    # → prompts/latest.md + the dated copy; retires audua sessions
+bash scripts/prompts.sh render    # → prompts/latest.md + the dated copy
 ```
 
 #### Gathering and judging are one move
@@ -267,8 +269,7 @@ and nothing should rebuild them underneath you.
 So `make gather` exists for looking at what the sources currently say (`--stdout` writes
 nothing), and is not a step you normally take yourself. Replacing a standing run is a
 deliberate act: the skill checks first unless you have plainly asked for a fresh set, since
-rendering overwrites `prompts/latest.md` and retires every audua session the new prompts
-cite.
+rendering overwrites `prompts/latest.md`.
 
 ### 5. Spawn a session where the writing belongs
 
@@ -396,7 +397,7 @@ eliciterlib/
   rank.py      the interest profile — orders the sweep, no longer gates it
   candidates.py  the week's sweep, held for a session to read and choose from
   corpus.py    indexia adapter: moves 4–7 → Signals
-  audua.py     audua adapter: unseen session summaries → Signals; state/audua.json
+  audua.py     audua adapter: recent (30d) session summaries → Signals
   posts.py     perceptua adapter: posts worth answering
   signals.py   Signal, the four registers, and what each one routes to
   material.py  every source → state/material.json, for a session to read

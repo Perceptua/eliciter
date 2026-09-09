@@ -72,7 +72,7 @@ an act the user performs there — so the `Op` log stays a record of things a hu
 If a user asks eliciter to save a note for them, the answer is to run
 `bash scripts/write.sh <n>` and do it in indexia — not to add a write path here.
 
-The one thing eliciter *does* write about audua is `state/audua.json` — its own file, not
-audua's, recording which sessions have already been offered as prompts (`audua.mark_seen`).
-That is a fact about *your reading of the corpus*, the same footing `state/papers.json`
-already has, and not a change to either corpus itself.
+eliciter writes nothing about audua at all — which sessions are eligible to prompt is
+computed statelessly from each session's date against a recency window (`audua.is_recent`),
+not tracked in a file. Contrast `state/papers.json`, which *does* record a fact about your
+reading of the corpus (marked read/rejected) because there is no other way to know it.

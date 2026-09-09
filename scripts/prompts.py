@@ -13,11 +13,6 @@ resolves cannot disagree about which prompt is 3.
 `check` is the same validation without the write, which is what to run while drafting.
 Everything derivable is derived rather than trusted — `length` and `project` come from the
 register, `n` from position — so a session only has to get right the things only it can.
-
-Rendering is also what **retires an audua session**: a recording that has appeared in a
-rendered run does not come back. That happens here, at the moment the file is actually
-written, and not at gather time — gathering is a pure read, and a gather you ran to see
-what was there should not silently burn through the queue of unheard recordings.
 """
 import argparse
 import json
@@ -31,7 +26,7 @@ from eliciterlib import config                                       # noqa: E40
 
 config.bootstrap()
 
-from eliciterlib import audua, render                                # noqa: E402
+from eliciterlib import render                                       # noqa: E402
 
 
 def state_path():
@@ -105,9 +100,7 @@ def main():
                    "gathered_at": data.get("gathered_at", ""),
                    "prompts": prompts}, fh, indent=2, ensure_ascii=False)
 
-    retired = audua.mark_seen(prompts)
-    print(f"[prompts] {len(prompts)} prompt(s) → {os.path.join(out, 'latest.md')}"
-          + (f"; retired {retired} audua session(s)" if retired else ""))
+    print(f"[prompts] {len(prompts)} prompt(s) → {os.path.join(out, 'latest.md')}")
     print("  write one with:  bash scripts/write.sh <n>")
     return 0
 
