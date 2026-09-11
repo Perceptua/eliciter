@@ -57,6 +57,7 @@ would mean judging Friday against a corpus that has moved.
 | `notes.flagged` | indexia moves 4–7: unnamed themes, ratified contradictions, orphans, anniversaries, structural debt. Each has `text` — the actual note prose, not a label. |
 | `notes.recent` | the last 25 notes in full. What they have been thinking about lately. |
 | `posts` | **every** perceptua post, full text. `adjacent_to_current_reading` is a term-overlap hint from `rank.py` — a hint, not a shortlist. Ignore it when you disagree. |
+| `misc` | **every** file dropped in the gitignored `misc/` folder, full text — loose `.txt`/`.md` fragments, plus markdown made from scanned handwritten pages by the `scan-misc` skill. No scoring, no shortlist: the folder stays small on purpose, so everything in it is in play. |
 | `sessions` | audua run recordings. Ones recorded in the last 30 days (`recent: true`) carry the whole `summary.md` and are eligible to prompt; older ones carry `intro` only, as context. |
 | `papers.read` | papers marked read, with abstracts. **These are the ones that prompt.** |
 | `papers.waiting` | the unread queue — context on where their attention is going, not prompt material. |
@@ -168,10 +169,10 @@ it read.
 ```
 
 `sources` is **required and must be real.** Every `ref` has to be one you saw in
-`state/material.json` — a note id, a post filename, an audua stem, an arxiv id. They are
-what the UI opens and what `write.sh` puts in the brief, so an invented ref is a citation to
-nothing. `render.validate` checks the `source` names but it cannot check that a ref exists;
-that one is on you.
+`state/material.json` — a note id, a post filename, a misc filename, an audua stem, an arxiv
+id. They are what the UI opens and what `write.sh` puts in the brief, so an invented ref is
+a citation to nothing. `render.validate` checks the `source` names but it cannot check that
+a ref exists; that one is on you.
 
 Derived for you, so leave them out: `n`, `length`, `project`, and a note's staging id.
 

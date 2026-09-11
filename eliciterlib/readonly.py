@@ -147,6 +147,10 @@ class ReadOnlyDir:
         with open(self._resolve(name), encoding="utf-8") as fh:
             return fh.read()
 
+    def mtime(self, name):
+        """Last-modified time, as a Unix timestamp. Metadata only — no content, no write."""
+        return os.path.getmtime(self._resolve(name))
+
     def __setattr__(self, key, value):
         raise ReadOnlyViolation(f"cannot set {key!r} on a read-only directory handle")
 
@@ -166,4 +170,10 @@ def posts_dir(path):
 
 def audua_dir(path):
     """The gated audua handle. The only way this project reaches the transcript output."""
+    return ReadOnlyDir(path)
+
+
+def misc_dir(path):
+    """The gated handle on the misc folder. Lives inside this repo, but it holds the
+    user's own dropped writing, not eliciter's — read the same as any other source."""
     return ReadOnlyDir(path)

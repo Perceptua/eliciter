@@ -81,6 +81,14 @@ def c_posts():
     return OK, f"{len(ps)} post(s), latest {max(p['date'] for p in ps)} (read-only)"
 
 
+def c_misc():
+    from eliciterlib import misc
+    items = misc.load()
+    if not items:
+        return MEH, f"{config.misc_dir()} — empty (drop .txt/.md files in, gitignored)"
+    return OK, f"{len(items)} file(s) (read-only)"
+
+
 def c_audua():
     from eliciterlib import audua
     sessions = audua.sessions()
@@ -181,7 +189,8 @@ def main():
     print("eliciter preflight\n")
     checks = [("config", c_config), ("indexia graph", c_graph),
               ("read-only gate", c_gate), ("indexia moves", c_moves),
-              ("perceptua posts", c_posts), ("audua sessions", c_audua),
+              ("perceptua posts", c_posts), ("misc folder", c_misc),
+              ("audua sessions", c_audua),
               ("interest profile", c_profile), ("reading queue", c_queue),
               ("material", c_material), ("sweep candidates", c_candidates)]
     if not a.no_network:

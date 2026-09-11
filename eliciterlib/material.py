@@ -11,7 +11,7 @@ and one a hill on a five-mile run. No amount of stopword tuning fixes that. What
 was a reader.
 
 So the split moved. **Gathering is a script; judging is a session.** This module does the
-half a script is actually good at: reach into four corpora through the read-only gate,
+half a script is actually good at: reach into five corpora through the read-only gate,
 pull out the whole of what is there, and write it down. What any of it *means* — what
 recurs, what is worth writing, in what register — is decided by the `elicit-writing` skill
 in a Claude session that has read the material. Nothing here scores, ranks by theme, or
@@ -23,7 +23,7 @@ queue and which post is nearest to current reading, because those are shortlists
 material nobody has read yet, and a cheap explicit filter beats no filter. It just no
 longer decides what you should write.
 
-**Read-only, like everything else here.** Every read goes through `corpus`, `posts`,
+**Read-only, like everything else here.** Every read goes through `corpus`, `posts`, `misc`,
 `audua` and `status`, which go through `readonly.py`. The only thing this writes is
 `state/material.json`, which is eliciter's own scratch.
 
@@ -39,7 +39,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-from . import arxiv, audua, config, corpus, posts, status
+from . import arxiv, audua, config, corpus, misc, posts, status
 
 NAME = "material.json"
 
@@ -105,7 +105,8 @@ def _signal_dicts(signals):
     return out
 
 
-def gather(log=print, want_papers=True, want_graph=True, want_posts=True, want_audua=True):
+def gather(log=print, want_papers=True, want_graph=True, want_posts=True, want_misc=True,
+           want_audua=True):
     """Read every source and return the material, plus a note of what failed.
 
     A source that is unreachable is recorded in `unavailable` and skipped rather than
@@ -169,6 +170,14 @@ def gather(log=print, want_papers=True, want_graph=True, want_posts=True, want_a
                      "adjacent_to_current_reading": p["file"] in flagged}
                     for p in sorted(every, key=lambda p: p["date"], reverse=True)]
         attempt("posts", _posts, [])
+
+    if want_misc:
+        def _misc():
+            return [{"ref": m["file"], "title": m["title"],
+                     "date": m["date"].isoformat() if m["date"] else "",
+                     "text": m["text"]}
+                    for m in misc.load()]
+        attempt("misc", _misc, [])
 
     if want_audua:
         def _audua():
@@ -250,6 +259,7 @@ def summarize(data):
         "flagged notes": len(notes.get("flagged") or []),
         "recent notes": len(notes.get("recent") or []),
         "posts": len(data.get("posts") or []),
+        "misc": len(data.get("misc") or []),
         "sessions": len(data.get("sessions") or []),
         "recent sessions": sum(1 for s in (data.get("sessions") or [])
                                if s.get("recent")),

@@ -13,5 +13,9 @@ digest/*.md
 # rather than shared; back it up if you care about it.
 state/
 
+# Ad-hoc writing and scanned notes — the user's own material, dropped here as a source. Not
+# eliciter's to publish; back it up separately if you care about it.
+misc/
+
 __pycache__/
 *.py[cod]

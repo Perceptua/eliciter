@@ -89,17 +89,17 @@ class TestRoutes(unittest.TestCase):
         code, body = self.get("/api/sources")
         self.assertEqual(code, 200, body[:400])
         data = json.loads(body)
-        for key in ("posts", "sessions", "notes", "papers", "errors"):
+        for key in ("posts", "misc", "sessions", "notes", "papers", "errors"):
             self.assertIn(key, data)
 
     def test_source_reader_round_trip(self):
         """Open the first thing the catalogue offers. Skips only if there is nothing."""
         data = json.loads(self.get("/api/sources")[1])
-        for kind in ("posts", "sessions", "notes", "papers"):
+        for kind in ("posts", "misc", "sessions", "notes", "papers"):
             rows = data.get(kind) or []
             if not rows:
                 continue
-            source = {"posts": "perceptua", "sessions": "audua",
+            source = {"posts": "perceptua", "misc": "misc", "sessions": "audua",
                       "notes": "indexia", "papers": "arxiv"}[kind]
             ref = urllib.parse.quote(str(rows[0]["ref"]))
             code, body = self.get(f"/api/source?source={source}&ref={ref}")

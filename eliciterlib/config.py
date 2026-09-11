@@ -22,7 +22,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 DEFAULTS = {
     "ELICITER_INDEXIA_ROOT": "/home/aphorikles/indexia",
-    "ELICITER_PERCEPTUA_POSTS": "/home/aphorikles/perceptua/perceptua/_posts",
+    "ELICITER_PERCEPTUA_POSTS": "/home/aphorikles/perceptua/_posts",
+    "ELICITER_MISC_DIR": os.path.join(ROOT, "misc"),
     "ELICITER_AUDUA_ROOT": "/home/aphorikles/audua/processing/output",
     "ELICITER_ARXIV_CATEGORIES": "cs.AI,cs.LG,cs.NE,q-bio.NC,nlin.AO",
     "ELICITER_ARXIV_LOOKBACK_DAYS": "7",
@@ -149,6 +150,15 @@ def exclude():
 
 def posts_dir():
     return os.environ["ELICITER_PERCEPTUA_POSTS"]
+
+
+def misc_dir():
+    """Where ad-hoc writing lives: dropped .txt/.md files, plus images a skill has already
+    converted to markdown. Gitignored — this is the user's own material, not eliciter's, and
+    is read through the same gate as the other sources even though it lives in this repo."""
+    d = os.environ["ELICITER_MISC_DIR"]
+    os.makedirs(d, exist_ok=True)
+    return d
 
 
 def audua_root():
