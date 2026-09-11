@@ -32,16 +32,17 @@ PROJECT = {"note": "indexia", "essay": "indexia", "journal": "indexia", "verse":
 # which is the shape a made-up citation takes here.
 #
 # The order is the order sections appear in a rendered run, for prompts that cite exactly
-# one source. Your own material leads and the papers come last: an indexia, perceptua or
-# audua prompt continues work only you can continue, while a paper prompt is available to
+# one source. Your own material leads and the papers come last: an indexia, perceptua, misc
+# or audua prompt continues work only you can continue, while a paper prompt is available to
 # anyone who read the paper, so when you only get through the top of a run the part that
-# survives is the part nobody else could write. audua sits after perceptua because a
-# published poem is finished material asking for a reply, where a recording is still raw.
+# survives is the part nobody else could write. misc sits after perceptua because it is also
+# finished writing — a dropped fragment or a transcribed page — asking for a reply, same as a
+# published poem; audua sits after misc because a recording is still raw.
 #
 # A prompt citing *several* sources is not in this list at all — it heads the file under
 # "across", because crossing two corpora is the one thing reading one of them could not
 # have produced.
-SOURCES = ("indexia", "perceptua", "audua", "arxiv")
+SOURCES = ("indexia", "perceptua", "misc", "audua", "arxiv")
 
 
 def source_rank(source):
@@ -62,7 +63,7 @@ class Signal:
     thinks a piece of structural debt is — passed along as one input among many rather than
     as a ranking anything is obliged to honour.
 
-    source      — 'indexia' | 'perceptua' | 'audua' | 'arxiv'
+    source      — 'indexia' | 'perceptua' | 'misc' | 'audua' | 'arxiv'
     kind        — source-specific discriminator ('move3', 'orphan', 'post-response', …)
     title       — short human label
     detail      — the excerpt the source considers salient

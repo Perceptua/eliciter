@@ -72,10 +72,10 @@ not predictable by the wrapper.
 - **Queue** — unread papers, with score and the terms that matched. ✓ Read / ✗ Reject.
   Marking one read is also what makes it eligible for a writing prompt.
 - **Decided** — read and rejected, with "↺ Back to queue" to undo.
-- **Sources** — everything eliciter can read, in four columns: recent indexia notes,
-  perceptua posts, audua recordings (flagged when already offered), and the paper queue.
-  Every row opens in the reader. This is the tab for reviewing material without going
-  through a prompt.
+- **Sources** — everything eliciter can read, in five columns: recent indexia notes,
+  perceptua posts, misc dropped writing, audua recordings (flagged when already offered),
+  and the paper queue. Every row opens in the reader. This is the tab for reviewing material
+  without going through a prompt.
 - **Search** — ad-hoc arxiv results, with "+ Add to queue".
 
 The header runs the two deterministic operations: **Sweep arxiv** and a search box.

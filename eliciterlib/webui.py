@@ -63,7 +63,7 @@ import urllib.parse
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import arxiv, audua, config, corpus, posts, status
+from . import arxiv, audua, config, corpus, misc, posts, status
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE = os.path.join(HERE, "ui.html")
@@ -139,6 +139,12 @@ def sources_payload():
          "preview": _first_lines(posts.plain_text(p))}
         for p in sorted(posts.load(), key=lambda p: p["date"], reverse=True)], [])
 
+    attempt("misc", lambda: [
+        {"ref": m["file"], "title": m["title"],
+         "date": m["date"].isoformat() if m["date"] else "",
+         "preview": _first_lines(m["text"])}
+        for m in misc.load()], [])
+
     attempt("sessions", lambda: [
         {"ref": s["stem"], "title": f"Audua — {s['date'].isoformat()}",
          "date": s["date"].isoformat(), "recent": audua.is_recent(s["date"]),
@@ -186,6 +192,15 @@ def source_detail(source, ref):
                         "body": posts.plain_text(p),
                         "where": os.path.join(config.posts_dir(), p["file"])}
         raise KeyError(f"no perceptua post {ref!r}")
+
+    if source == "misc":
+        for m in misc.load():
+            if m["file"] == ref:
+                return {"source": source, "ref": m["file"], "title": m["title"],
+                        "subtitle": m["date"].isoformat() if m["date"] else "",
+                        "body": m["text"],
+                        "where": os.path.join(config.misc_dir(), m["file"])}
+        raise KeyError(f"no misc file {ref!r}")
 
     if source == "audua":
         for sess in audua.sessions():

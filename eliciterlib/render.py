@@ -48,6 +48,7 @@ SOURCE_HEADINGS = {
     "across": "Across your sources — what keeps recurring",
     "indexia": "From your notes — indexia",
     "perceptua": "From your writing — perceptua",
+    "misc": "From your other writing — misc",
     "audua": "From your recordings — audua",
     "arxiv": "From your reading — arxiv",
 }
@@ -158,8 +159,8 @@ def render(prompts, stats=None):
     L += ["_Written by a Claude session from `state/material.json`; rendered by "
           "`scripts/prompts.sh render` and overwritten on each run. Every prompt names a "
           "site and a shape and stops there — what it is about is yours. eliciter reads "
-          "indexia, audua, and perceptua through a read-only gate and writes to none of "
-          "them; `scripts/write.sh <n>` opens a session where the writing belongs._", ""]
+          "indexia, audua, perceptua, and misc through a read-only gate and writes to none "
+          "of them; `scripts/write.sh <n>` opens a session where the writing belongs._", ""]
 
     if stats.get("gathered_at"):
         L += [f"_From material gathered {stats['gathered_at']}._", ""]

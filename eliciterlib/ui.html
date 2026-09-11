@@ -324,6 +324,7 @@ function sourcesView() {
         it => esc(it.source_ref || "")))}
     ${col("posts", "perceptua — posts", sourceRows(S_.posts || [], "perceptua",
         it => (it.categories || []).join(", ")))}
+    ${col("misc", "misc — dropped writing", sourceRows(S_.misc || [], "misc"))}
     ${col("sessions", "audua — recordings", sourceRows(S_.sessions || [], "audua",
         it => (it.threads ? "threads left open" : "") +
               (!it.recent ? (it.threads ? " · " : "") + "older than 30d" : "")))}

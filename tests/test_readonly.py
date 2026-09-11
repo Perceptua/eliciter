@@ -143,7 +143,7 @@ class TestDirHandle(unittest.TestCase):
 
     def test_has_no_write_methods(self):
         public = {n for n in dir(self.gate) if not n.startswith("_")}
-        self.assertEqual(public, {"names", "dirs", "read", "root"})
+        self.assertEqual(public, {"names", "dirs", "read", "mtime", "root"})
 
 
 class TestAuduaDirHandle(unittest.TestCase):
@@ -167,7 +167,28 @@ class TestAuduaDirHandle(unittest.TestCase):
 
     def test_has_no_write_methods(self):
         public = {n for n in dir(self.gate) if not n.startswith("_")}
-        self.assertEqual(public, {"names", "dirs", "read", "root"})
+        self.assertEqual(public, {"names", "dirs", "read", "mtime", "root"})
+
+
+class TestMiscDirHandle(unittest.TestCase):
+    def setUp(self):
+        self.gate = readonly.misc_dir(config.misc_dir())
+
+    def test_lists_reads_and_stats(self):
+        # misc/ is allowed to be empty — this only exercises listing and traversal.
+        names = self.gate.names()
+        for name in names:
+            self.assertIsInstance(self.gate.read(name), str)
+            self.assertIsInstance(self.gate.mtime(name), float)
+
+    def test_refuses_path_traversal(self):
+        for bad in ("../../../etc/passwd", "../README.md", "/etc/passwd"):
+            with self.assertRaises(readonly.ReadOnlyViolation, msg=bad):
+                self.gate.read(bad)
+
+    def test_has_no_write_methods(self):
+        public = {n for n in dir(self.gate) if not n.startswith("_")}
+        self.assertEqual(public, {"names", "dirs", "read", "mtime", "root"})
 
 
 class TestProjectUsesOnlyTheGate(unittest.TestCase):

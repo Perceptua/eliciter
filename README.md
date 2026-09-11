@@ -4,15 +4,15 @@ Reads what you've been reading, and asks you to write.
 
 It replaces the weekly Claude Desktop arxiv task with a local sweep, keeps a **reading
 queue** of at most ten papers whose status you control, and turns that queue — together
-with your indexia notes, perceptua posts, and audua run recordings — into numbered writing
-prompts. **A script gathers; a Claude session judges.** Ask for prompts and everything the
-sources have to say is collected into one file, then read and turned into prompts by a
-session — not by a rule. Nothing runs on a schedule, so a run of prompts stays exactly as it
-is until you decide to replace it. When you want to write one, it opens a session in the
-project where the writing belongs.
+with your indexia notes, perceptua posts, misc dropped writing, and audua run recordings —
+into numbered writing prompts. **A script gathers; a Claude session judges.** Ask for
+prompts and everything the sources have to say is collected into one file, then read and
+turned into prompts by a session — not by a rule. Nothing runs on a schedule, so a run of
+prompts stays exactly as it is until you decide to replace it. When you want to write one,
+it opens a session in the project where the writing belongs.
 
-It **cannot write to indexia, perceptua, or audua**. That is enforced by code and by tests,
-not by convention. See [Read-only, structurally](#read-only-structurally).
+It **cannot write to indexia, perceptua, audua, or misc**. That is enforced by code and by
+tests, not by convention. See [Read-only, structurally](#read-only-structurally).
 
 ```bash
 make ui        # the local UI in the foreground at http://127.0.0.1:8473
@@ -42,7 +42,8 @@ bash scripts/ui.sh status
 Five tabs — **Prompts** (with source, register and target project, the material shown in
 place, and one click to open any source it names), **Queue** (unread, with the terms that
 matched, one click to read/reject), **Decided** (with undo), **Sources** (everything
-eliciter can read — every note, post, recording and paper — each openable in the reader),
+eliciter can read — every note, post, misc file, recording and paper — each openable in the
+reader),
 **Search** (ad-hoc arxiv, one click to add). The header runs the sweep, the elicit, and the
 search.
 
@@ -193,12 +194,13 @@ scripts/gather.sh  →  state/material.json  →  a Claude session  →  state/p
                                               prompts/latest.md  +  scripts/write.sh <n>
 ```
 
-`gather.sh` reaches into all four corpora through the read-only gate and writes down the
+`gather.sh` reaches into all five corpora through the read-only gate and writes down the
 *whole* of what is there — the note prose behind each flagged move, every post in full,
-recent (last 30 days) session summaries entire, the abstracts of papers you have read, your stated
-interests, and **the prompts from last time, so a session knows what's already been asked
-and can build on it** — repeating one is fine when new material genuinely connects to it.
-It scores nothing and asks nothing. Around 90KB; it is meant to be read.
+every file in `misc/` in full, recent (last 30 days) session summaries entire, the abstracts
+of papers you have read, your stated interests, and **the prompts from last time, so a
+session knows what's already been asked and can build on it** — repeating one is fine when
+new material genuinely connects to it. It scores nothing and asks nothing. Around 90KB; it
+is meant to be read.
 
 The `elicit-writing` skill is where the editorial rules now live, and they are the same
 rules `prompts.py` held:
@@ -225,7 +227,7 @@ Every prompt cites its `sources` — one or several — and that list is mandato
 with no provenance is the machine making something up. A prompt drawing on more than one
 corpus heads the file under *Across your sources*, which is what replaced the old
 `confluence` special case; everything else falls under its single source, in the order
-**indexia → perceptua → audua → arxiv**. Your own material leads, because those prompts
+**indexia → perceptua → misc → audua → arxiv**. Your own material leads, because those prompts
 continue work only you can continue while a paper prompt is available to anyone who read the
 paper.
 
@@ -304,9 +306,11 @@ Three layers, in `eliciterlib/readonly.py`:
    `SELECT`/`MATCH`/`TRAVERSE`, no write keyword, checked with string literals stripped so
    a note body containing "delete" cannot trip it.
 
-`ReadOnlyDir` is the same shape for files: `names()`, `dirs()`, `read()`, path traversal
-refused, nothing that writes. `posts_dir()` gates perceptua's `_posts/`; `audua_dir()` gates
-audua's per-session output the same way.
+`ReadOnlyDir` is the same shape for files: `names()`, `dirs()`, `read()`, `mtime()`, path
+traversal refused, nothing that writes. `posts_dir()` gates perceptua's `_posts/`;
+`audua_dir()` gates audua's per-session output the same way; `misc_dir()` gates `misc/`,
+which lives inside this repo but holds your own dropped writing, not eliciter's — gated the
+same as the sources this project doesn't own.
 
 **The project may only use the gate.** `tests/test_readonly.py` scans this project's own
 source and fails if any module constructs an `Arcade`, calls `.command(`, or opens a source
@@ -399,6 +403,7 @@ eliciterlib/
   corpus.py    indexia adapter: moves 4–7 → Signals
   audua.py     audua adapter: recent (30d) session summaries → Signals
   posts.py     perceptua adapter: posts worth answering
+  misc.py      misc adapter: dropped writing + scanned pages, read in full
   signals.py   Signal, the four registers, and what each one routes to
   material.py  every source → state/material.json, for a session to read
   render.py    validate what a session wrote → prompts/latest.md
