@@ -39,7 +39,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-from . import arxiv, audua, config, corpus, misc, posts, status
+from . import arxiv, audua, config, corpus, misc, posts, run, status
 
 NAME = "material.json"
 
@@ -69,6 +69,14 @@ def _prompt_history(limit=3):
     one piece of context the old pipeline had no way to use: it built each run from the
     sources alone, so a note that stayed orphaned got the same prompt every week until you
     wrote something. A reader can simply not do that.
+
+    Each ask carries its `status`, which is the difference between the three things an
+    unwritten prompt can mean. **open** is a standing offer nobody has decided about, and
+    reissuing it when new material bears on it is exactly right. **written** is done — the
+    writing exists, and asking for it again would be asking twice. **rejected** is a
+    judgement you already made: not this, not from this material. Without the status all
+    three look identical from here, which is how the same unwanted ask comes back run after
+    run.
     """
     out = []
     state = os.path.join(config.out_dir("state"), "prompts.json")
@@ -79,6 +87,8 @@ def _prompt_history(limit=3):
             for p in data.get("prompts", []):
                 out.append({"generated_at": data.get("generated_at", ""),
                             "ask": p.get("ask", ""), "title": p.get("title", ""),
+                            "status": run.status_of(p),
+                            "decided_at": p.get("decided_at", ""),
                             "source": p.get("source", ""), "ref": p.get("ref", "")})
         except (OSError, ValueError):
             pass

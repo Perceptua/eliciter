@@ -63,7 +63,7 @@ import urllib.parse
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import arxiv, audua, config, corpus, misc, posts, status
+from . import arxiv, audua, config, corpus, misc, posts, run, status
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE = os.path.join(HERE, "ui.html")
@@ -80,11 +80,9 @@ def _profile(db):
 def state_payload():
     """Everything the page renders, in one round trip."""
     q = status.Queue()
-    prompts_path = os.path.join(config.out_dir("state"), "prompts.json")
-    listed = []
-    if os.path.isfile(prompts_path):
-        with open(prompts_path, encoding="utf-8") as fh:
-            listed = json.load(fh).get("prompts", [])
+    # Read through `run.Run` rather than json.load here, so the page and the CLI agree on
+    # what a prompt with no `status` field means (open) instead of each deciding for itself.
+    listed = [{**p, "status": run.status_of(p)} for p in run.Run().prompts]
     return {
         "papers": {
             "unread": q.active(),
@@ -354,6 +352,16 @@ class Handler(BaseHTTPRequestHandler):
                     qq.mark(body["id"], body["status"])
                     qq.save()
                 return self._json(200, state_payload())
+            # Deciding about a prompt is the same kind of act as marking a paper read: a
+            # record of what *you* did, kept in eliciter's own state. It is not the UI
+            # deciding anything — which is the line the elicit and sweep buttons crossed,
+            # and why they are gone.
+            if url.path == "/api/prompt":
+                with _lock:
+                    r = run.Run()
+                    r.mark(body["n"], body["status"], expect_title=body.get("title"))
+                    r.save()
+                return self._json(200, state_payload())
             if url.path == "/api/add":
                 with _lock:
                     qq = status.Queue()
@@ -361,6 +369,14 @@ class Handler(BaseHTTPRequestHandler):
                     qq.save()
                 return self._json(200, {"added": not existed, "paper": entry})
             return self._send(404, "not found", "text/plain")
+        except run.StaleRun as e:
+            # 409, not 404: the request was well formed and the prompt exists — it is just
+            # not the one the page was showing. The page says so and refreshes.
+            return self._json(409, {"error": str(e)})
+        except KeyError as e:
+            return self._json(404, {"error": str(e.args[0]) if e.args else "not found"})
+        except ValueError as e:
+            return self._json(400, {"error": str(e)})
         except SystemExit as e:
             return self._json(503, {"error": str(e)})
         except Exception as e:                  # noqa: BLE001

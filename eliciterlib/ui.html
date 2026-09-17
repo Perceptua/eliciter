@@ -50,6 +50,17 @@
   .actions { display:flex; gap:.4rem; margin-top:.6rem; flex-wrap:wrap; }
   .actions button { font-size:.83rem; padding:.25rem .6rem; }
   .ok { color:var(--ok); } .no { color:var(--no); }
+  /* A decided prompt stays on the page — what you turned down is part of what the run
+     asked, and hiding it on the spot would make the list disagree with the file. It just
+     stops competing for attention with the ones still open. "Hide decided" is a button,
+     so the quieting is reversible and the count stays visible either way. */
+  .card.decided { opacity:.58; }
+  .card.decided:hover { opacity:1; }
+  .card.decided h3 { text-decoration-color:var(--dim); }
+  .card.rejected h3 { text-decoration:line-through; }
+  .chip.ok { color:var(--ok); } .chip.no { color:var(--no); }
+  .runbar { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap;
+            margin:0 0 .7rem; color:var(--dim); font-size:.82rem; }
   .empty { color:var(--dim); padding:2rem 1rem; text-align:center; }
   #toast { position:fixed; bottom:1rem; left:50%; transform:translateX(-50%);
            background:var(--ink); color:var(--bg); padding:.5rem .9rem; border-radius:6px;
@@ -157,7 +168,7 @@
 <script>
 const $ = s => document.querySelector(s);
 let S = { papers:{unread:[],read:[],rejected:[],cap:10}, prompts:[], config:{} };
-let searchResults = [], tab = "prompts", busy = false;
+let searchResults = [], tab = "prompts", busy = false, hideDecided = false;
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c =>
   ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
@@ -252,29 +263,46 @@ function sourceBlock(p) {
     </li>`).join("") + `</ul>`;
 }
 
+// A prompt is an offer, and the two things you can do with an offer are take it up or turn
+// it down. Both are recorded here and nowhere else — marking one does not write to indexia
+// or perceptua, and does not re-render prompts/latest.md; it records what you did with the
+// run, which is what the next session is shown when it writes the next one.
+//
+// "Written" is never set by opening a session. `Write this →` starts the writing; only you
+// know whether it got finished.
 function promptCard(p) {
+  const st = p.status || "open";
   const sources = p.sources || [];
   // The chip says where a prompt came from. Several sources is the interesting case, so it
   // is named as such rather than listed — the openable list below says which.
   const origin = sources.length > 1
     ? `${sources.length} sources`
     : (sources[0] ? sources[0].source : "");
-  return `<article class="card">
+  const badge = st === "written" ? `<span class="chip ok">✓ written</span>`
+              : st === "rejected" ? `<span class="chip no">✗ rejected</span>` : "";
+  const when = (p.decided_at || "").slice(0, 10);
+  const actions = st === "open"
+    ? `<button onclick="showBrief(${p.n})">Write this →</button>
+       <button onclick="decide(${p.n},'written')">✓ Written</button>
+       <button onclick="decide(${p.n},'rejected')">✗ Not this one</button>`
+    : `<button onclick="decide(${p.n},'open')">↺ Back on offer</button>
+       <button onclick="showBrief(${p.n})">Brief →</button>`;
+  return `<article class="card${st === "open" ? "" : " decided"}${st === "rejected" ? " rejected" : ""}">
     <h3>${p.n}. ${esc(p.title)}</h3>
     <div class="meta">
+      ${badge}
       <span class="chip">${esc(p.length)} form</span>
       <span class="chip">${esc(p.register)} · ${esc(p.form)}</span>
       ${origin ? `<span class="chip">${esc(origin)}</span>` : ""}
       <span>→ ${esc(p.project)}</span>
+      ${when ? `<span>${esc(when)}</span>` : ""}
     </div>
     <p style="margin:.5rem 0 .2rem"><strong>${esc(p.ask)}</strong></p>
     ${p.because ? `<p class="abs open" style="margin-top:.2rem">${esc(p.because)}</p>` : ""}
     ${sourceBlock(p)}
     ${materialBlock(p)}
     ${p.commit ? `<p class="meta" style="margin-top:.5rem">→ ${esc(p.commit)}</p>` : ""}
-    <div class="actions">
-      <button onclick="showBrief(${p.n})">Write this →</button>
-    </div>
+    <div class="actions">${actions}</div>
   </article>`;
 }
 
@@ -336,8 +364,18 @@ function sourcesView() {
 function paint() {
   const v = $("#view");
   if (tab === "prompts") {
-    v.innerHTML = S.prompts.length
-      ? S.prompts.map(promptCard).join("")
+    const all = S.prompts, statusOf = p => p.status || "open";
+    const nW = all.filter(p => statusOf(p) === "written").length;
+    const nR = all.filter(p => statusOf(p) === "rejected").length;
+    const shown = hideDecided ? all.filter(p => statusOf(p) === "open") : all;
+    const bar = `<div class="runbar">
+      <span>${all.length} prompt${all.length === 1 ? "" : "s"} · ${all.length - nW - nR} open
+        ${nW ? `· <span class="ok">${nW} written</span>` : ""}
+        ${nR ? `· <span class="no">${nR} rejected</span>` : ""}</span>
+      ${nW + nR ? `<button onclick="hideDecided=!hideDecided;paint()">${
+        hideDecided ? "show decided" : "hide decided"}</button>` : ""}</div>`;
+    v.innerHTML = all.length
+      ? bar + shown.map(promptCard).join("")
       // Prompts are written by a Claude session that has read state/material.json, so the
       // empty state is instructions rather than a button — the page cannot start a session
       // any more than it can start the writing one. Both hand over a command instead.
@@ -389,6 +427,22 @@ async function mark(id, status) {
   try { S = await api("/api/status", {method:"POST", body:JSON.stringify({id, status})});
         paint(); toast(`marked ${status}`); }
   catch (e) { toast(e.message); }
+}
+// The title rides along as a staleness guard: a session can replace the whole run between
+// polls, and then prompt 3 on this page is not prompt 3 on disk. The server compares and
+// refuses (409) rather than deciding about the wrong prompt, and we repaint with the run
+// that actually exists.
+async function decide(n, status) {
+  const p = S.prompts.find(x => x.n === n);
+  try {
+    S = await api("/api/prompt", {method:"POST",
+      body: JSON.stringify({n, status, title: p ? p.title : ""})});
+    paint();
+    toast(status === "open" ? "back on offer" : `marked ${status}`);
+  } catch (e) {
+    toast(e.message, 5000);
+    refresh().catch(() => {});
+  }
 }
 async function addPaper(id) {
   const paper = searchResults.find(p => p.id === id);

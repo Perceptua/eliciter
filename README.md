@@ -40,7 +40,8 @@ bash scripts/ui.sh status
 ```
 
 Five tabs — **Prompts** (with source, register and target project, the material shown in
-place, and one click to open any source it names), **Queue** (unread, with the terms that
+place, one click to open any source it names, and ✓/✗ to say you wrote one or that it is
+not for you), **Queue** (unread, with the terms that
 matched, one click to read/reject), **Decided** (with undo), **Sources** (everything
 eliciter can read — every note, post, misc file, recording and paper — each openable in the
 reader),
@@ -253,6 +254,33 @@ cannot check is that a `ref` exists — that one is on the session, and it is to
 bash scripts/prompts.sh check     # validate, write nothing
 bash scripts/prompts.sh render    # → prompts/latest.md + the dated copy
 ```
+
+#### Saying what you did with a prompt
+
+A run is a standing offer, and two things happen to an offer: you take it up, or you do not
+want it. Both are recorded — in the UI with ✓ and ✗ on the prompt, or from the terminal:
+
+```bash
+bash scripts/prompts.sh written 3   # you wrote it
+bash scripts/prompts.sh reject 4    # not this one
+bash scripts/prompts.sh reopen 4    # undo either
+```
+
+The status lives beside the prompt in `state/prompts.json` (`eliciterlib/run.py` is its only
+writer) and survives a re-render, so `prompts.sh render` cannot quietly put a rejected prompt
+back on offer. Decided prompts stay in the run and in the rendered file, marked — what you
+turned down is part of what the run asked. Nothing here writes to indexia or perceptua: like
+the reading queue, it is a record of *your* decision.
+
+**Opening a session does not mark anything.** `write.sh` starts the writing; only you know
+whether it got finished.
+
+The reason to bother is the next run. `material.json` hands the standing run to the next
+session as `previous_prompts`, and with a status attached, *open*, *written* and *rejected*
+stop looking alike: an open prompt is a live offer worth reissuing when new material bears on
+it, a written one is done, and a rejected one is a judgement you already made. The trade is
+that replacing a run drops its decisions — the asks survive in `prompts/YYYY-MM-DD.md`, but
+the record of turning one down does not outlive the run it was about.
 
 #### Gathering and judging are one move
 
