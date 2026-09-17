@@ -24,7 +24,8 @@ generated the file and when it is overwritten, then sections. A run that finds n
 """
 from datetime import datetime, timedelta, timezone
 
-from .signals import LENGTH, PROJECT, REGISTERS, SOURCES
+from .run import status_of
+from .signals import LENGTH, PROJECT, PROMPT_STATUSES, REGISTERS, SOURCES
 
 # A staging filename is an indexia spec §4 id: a compact UTC timestamp to the millisecond.
 # Rendering one into a note prompt means committing the answer is `cat > staging/<that>.md`
@@ -119,6 +120,17 @@ def validate(raw):
                 f"{where}: unknown source(s) {', '.join(sorted(set(unknown)))}; "
                 f"expected one of {', '.join(SOURCES)}")
 
+        # A decision you already made about this prompt survives a re-render. `render` is
+        # not only run when a session writes a new run — `prompts.sh render` on the
+        # standing one is a perfectly ordinary thing to do — and dropping the field here
+        # would quietly un-reject a prompt every time it was run.
+        #
+        # It is read leniently and written only when set, so the session writing a run
+        # never has to know this field exists (see `run.status_of`).
+        status = str(p.get("status") or "").strip().lower()
+        decided = {} if status not in PROMPT_STATUSES or status == "open" else {
+            "status": status, "decided_at": str(p.get("decided_at") or "").strip()}
+
         out.append({
             "n": i,                                  # assigned here, never trusted
             "register": register,
@@ -136,6 +148,7 @@ def validate(raw):
                        or (_staging_commit(i) if register == "note" else "")),
             "sources": sources,
             "material": str(p.get("material") or "").strip(),
+            **decided,
         })
     return out
 
@@ -173,7 +186,17 @@ def render(prompts, stats=None):
         return "\n".join(L)
 
     n_short = sum(1 for p in prompts if p["length"] == "short")
-    L += [f"_{n_short} short · {len(prompts) - n_short} long._", ""]
+    tally = [f"{n_short} short · {len(prompts) - n_short} long"]
+    # What you have done with the run, when you have done anything. Rendered from the same
+    # field the UI writes, so a file re-rendered after a week of deciding says so — but a
+    # fresh run stays a clean list rather than carrying three zeroes nobody asked for.
+    decided = [(status_of(p), p) for p in prompts]
+    n_written = sum(1 for st, _ in decided if st == "written")
+    n_rejected = sum(1 for st, _ in decided if st == "rejected")
+    if n_written or n_rejected:
+        tally += [f"{n_written} written", f"{n_rejected} rejected",
+                  f"{len(prompts) - n_written - n_rejected} still open"]
+    L += ["_" + " · ".join(tally) + "._", ""]
 
     # Walk the run in the order the session wrote it, opening a section whenever the
     # section changes. Grouping by filtering instead would reorder the run, and the order
@@ -184,7 +207,13 @@ def render(prompts, stats=None):
         if sec != section:
             section = sec
             L += [f"## {SOURCE_HEADINGS.get(sec, sec)}", ""]
-        L += [f"### {p['n']}. {p['title']}", "", f"**{p['ask']}**", ""]
+        st = status_of(p)
+        # The mark goes in the heading, where it is visible in a table of contents and in
+        # the one-line grep people actually use on this file. A decided prompt keeps its
+        # whole entry: what you turned down is part of what a run asked, and deleting it
+        # here would make the file disagree with `state/prompts.json`.
+        mark = {"written": "  ✓ written", "rejected": "  ✗ rejected"}.get(st, "")
+        L += [f"### {p['n']}. {p['title']}{mark}", "", f"**{p['ask']}**", ""]
         if p["because"]:
             L += [p["because"], ""]
         for s in p["sources"]:
@@ -196,7 +225,12 @@ def render(prompts, stats=None):
         L += ["— " + " · ".join([f"`{p['form']}`", p["register"], p["length"]]), ""]
         if p["commit"]:
             L += [f"→ {p['commit']}", ""]
-        L += [f"→ `bash scripts/write.sh {p['n']}` to write it in {p['project']}", ""]
+        if st == "open":
+            L += [f"→ `bash scripts/write.sh {p['n']}` to write it in {p['project']}", ""]
+        else:
+            when = (p.get("decided_at") or "")[:10]
+            L += [f"— {st}{f' {when}' if when else ''} · "
+                  f"`bash scripts/prompts.sh reopen {p['n']}` to put it back on offer", ""]
     return "\n".join(L)
 
 

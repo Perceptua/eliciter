@@ -39,7 +39,11 @@ would mean judging Friday against a corpus that has moved.
    over" — show them what is currently on offer (`bash scripts/prompts.sh show`) and check
    before going further. Rendering overwrites `prompts/latest.md`, and overwrites the dated
    file if it is the same day. That is fine when it is wanted and annoying when it is not,
-   and prompts they have not acted on yet are the whole point of the file.
+   and prompts they have not acted on yet are the whole point of the file. `show` marks each
+   one ✓ written or ✗ rejected: a run where everything is decided is spent and replacing it
+   needs no ceremony, while one still full of open asks does. If they tell you which of the
+   standing prompts to keep, mark the rest rejected (`bash scripts/prompts.sh reject <n>`)
+   *before* writing the new run — that is the record the next run after this one reads.
 2. **Gather.** `bash scripts/gather.sh`. Always, as part of the same move. It is a read —
    nothing is decided, and it takes a couple of seconds.
 3. **Read `state/material.json`.** All of it. ~110KB; it is meant to be read, not grepped.
@@ -62,7 +66,7 @@ would mean judging Friday against a corpus that has moved.
 | `papers.read` | papers marked read, with abstracts. **These are the ones that prompt.** |
 | `papers.waiting` | the unread queue — context on where their attention is going, not prompt material. |
 | `interests` / `exclude` | what they have said they care about, independent of what they have written. |
-| `previous_prompts` | **what you asked last time.** Because nothing regenerates on a schedule, a standing run may be days old — treat these as things the user has had in front of them and not yet written. Repeating one is fine when new material genuinely connects to it (see below) — the bar is the connection, not novelty for its own sake. |
+| `previous_prompts` | **what you asked last time, and what became of it.** Because nothing regenerates on a schedule, a standing run may be days old. Each ask carries a `status`: `open` (undecided — the user has had it in front of them and not acted), `written` (they wrote it; do not ask again), `rejected` (they turned it down; see below). Repeating an `open` one is fine when new material genuinely connects to it — the bar is the connection, not novelty for its own sake. |
 
 ## The rule that has not changed
 
@@ -115,6 +119,11 @@ This is the judgement the old pipeline could not make. Aim for **5–7** prompts
   you should not do is reissue the identical ask with nothing new behind it — that is
   padding, not persistence. The judgement is the same as anywhere else in this doc: real
   connection earns the prompt, its absence does not.
+- **A `rejected` prompt is an answer, not a gap.** The user marked it: not this, not from
+  this material. Do not reissue it, and do not reissue it reworded — that is the same ask
+  wearing a hat. The site can come back only when something genuinely new has landed on it
+  since the rejection, and then `because` says what that is. A `written` one is finished;
+  ask about what the writing *opened*, if anything, not for the writing again.
 
 ## Registers, and what routes where
 

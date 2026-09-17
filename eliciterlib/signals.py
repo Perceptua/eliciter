@@ -44,6 +44,15 @@ PROJECT = {"note": "indexia", "essay": "indexia", "journal": "indexia", "verse":
 # have produced.
 SOURCES = ("indexia", "perceptua", "misc", "audua", "arxiv")
 
+# What you can have decided about a prompt. **open** is the absence of a decision, so it is
+# never written to the file — see `run.status_of`. The other two are the two things that
+# actually happen to a standing offer: you took it up, or you did not want it.
+#
+# `written` is deliberately not set by `write.sh` opening a session. Opening a session is
+# starting, and a run of prompts is a list of things to write, not a list of sessions
+# opened — so the only thing that marks a prompt written is you saying you wrote it.
+PROMPT_STATUSES = ("open", "written", "rejected")
+
 
 def source_rank(source):
     """Position in `SOURCES`; an unknown source sorts last rather than raising."""

@@ -68,7 +68,12 @@ not predictable by the wrapper.
 - **Prompts** — every elicitation with its source, register, length and target project.
   The material is shown in place as prose (clipped, with "show the rest"), not hidden behind
   a disclosure triangle. "Write this →" opens the brief; "Open the source" opens the whole
-  post, transcript, note or abstract in the reader.
+  post, transcript, note or abstract in the reader. **✓ Written / ✗ Not this one** record
+  what you did with the offer; a decided prompt stays in the list, greyed and marked, with
+  "↺ Back on offer" to undo, and "hide decided" quiets them once several pile up. Opening
+  the brief marks nothing — starting is not finishing. The same marks are available from
+  the terminal (`prompts.sh written 3` / `reject 3` / `reopen 3`), and they are what tells
+  the *next* run which asks were turned down rather than merely not got to yet.
 - **Queue** — unread papers, with score and the terms that matched. ✓ Read / ✗ Reject.
   Marking one read is also what makes it eligible for a writing prompt.
 - **Decided** — read and rejected, with "↺ Back to queue" to undo.

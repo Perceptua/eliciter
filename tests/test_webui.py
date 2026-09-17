@@ -106,6 +106,45 @@ class TestRoutes(unittest.TestCase):
             self.assertEqual(code, 200, f"{source}: {body[:300]}")
             self.assertTrue(json.loads(body).get("body"), f"{source} returned no text")
 
+    def test_prompt_decision_round_trip(self):
+        """Mark a prompt, see it in /api/state, then put it back exactly as it was.
+
+        This is the one test here that writes, and it writes to the run the user is
+        actually looking at — so it restores the prompt's original status in a finally,
+        including the case where it was already decided.
+        """
+        prompts = json.loads(self.get("/api/state")[1])["prompts"]
+        if not prompts:
+            self.skipTest("no standing run to decide about")
+        p = prompts[0]
+        before = p.get("status") or "open"
+        try:
+            code, body = self.post("/api/prompt",
+                                   {"n": p["n"], "status": "rejected", "title": p["title"]})
+            self.assertEqual(code, 200, body[:300])
+            back = next(x for x in json.loads(body)["prompts"] if x["n"] == p["n"])
+            self.assertEqual(back["status"], "rejected")
+            self.assertTrue(back.get("decided_at"))
+        finally:
+            self.post("/api/prompt", {"n": p["n"], "status": before, "title": p["title"]})
+        after = json.loads(self.get("/api/state")[1])["prompts"]
+        self.assertEqual((next(x for x in after if x["n"] == p["n"]).get("status")
+                          or "open"), before)
+
+    def test_stale_decision_is_refused(self):
+        """A title that does not match means the run changed under the page: 409, no write."""
+        prompts = json.loads(self.get("/api/state")[1])["prompts"]
+        if not prompts:
+            self.skipTest("no standing run to decide about")
+        n = prompts[0]["n"]
+        code, _ = self.post("/api/prompt",
+                            {"n": n, "status": "written", "title": "not this prompt"})
+        self.assertEqual(code, 409)
+        after = next(x for x in json.loads(self.get("/api/state")[1])["prompts"]
+                     if x["n"] == n)
+        self.assertEqual(after.get("status") or "open",
+                         prompts[0].get("status") or "open")
+
     # -- failures are 404s, never 500s ---------------------------------------
     def test_unknown_source_is_404(self):
         for path in ("/api/source?source=twitter&ref=x",
@@ -115,6 +154,11 @@ class TestRoutes(unittest.TestCase):
                      "/api/nothing-here"):
             code, body = self.get(path)
             self.assertEqual(code, 404, f"{path} → {code} {body[:200]}")
+        # A prompt that does not exist is a 404 too; a status that does not exist is a 400.
+        self.assertEqual(self.post("/api/prompt",
+                                   {"n": 999999, "status": "written"})[0], 404)
+        self.assertEqual(self.post("/api/prompt",
+                                   {"n": 1, "status": "finished"})[0], 400)
 
     def test_removed_routes_are_gone(self):
         """Elicit and sweep were removed on purpose — judgement is a session's, not a
