@@ -8,24 +8,31 @@ There used to be a `Prompt` here too, built by a `prompts.py` that turned each s
 an ask by rule. That is gone (2026-08-30). A prompt is now written by a Claude session that
 has read the material, and lives as JSON in `state/prompts.json`; `render.py` validates it
 and renders it. So what is left of prompt-shape in this module is the small closed
-vocabulary a session has to write *in* — the four registers, and what each one implies —
+vocabulary a session has to write *in* — the five registers, and what each one implies —
 because those are the things `write.sh` routes on and they cannot be free text.
 
 The registers are unchanged, and so is what they mean. What changed is who chooses.
 """
 from dataclasses import dataclass, field
 
-# The four registers, and which of the two lengths each belongs to. The short/long split is
+# The five registers, and which of the two lengths each belongs to. The short/long split is
 # how the rendered file is summarized, because "have I got a short thing and a long thing to
 # write today" is the question actually being asked of it.
-REGISTERS = ("note", "verse", "essay", "journal")
-LENGTH = {"note": "short", "verse": "short", "essay": "long", "journal": "long"}
+#
+# `post` (added 2026-09-23) is the one register written for somebody else: short and pithy,
+# presenting something you have been reading or thinking about to an audience. It has no
+# publishing home yet, so it lands as a file in eliciter's own misc/ folder — the one place
+# eliciter may write into (see the scan-misc skill) — until one exists.
+REGISTERS = ("note", "verse", "post", "essay", "journal")
+LENGTH = {"note": "short", "verse": "short", "post": "short",
+          "essay": "long", "journal": "long"}
 
 # Where the writing gets done. `scripts/write.sh` reads this to open a session in the right
 # project, so it has to be the directory name, not a label. **Derived from the register,
 # never chosen** — a session picks the register and this settles the rest, so there is no
 # way to write a prompt that asks for verse and routes to indexia.
-PROJECT = {"note": "indexia", "essay": "indexia", "journal": "indexia", "verse": "perceptua"}
+PROJECT = {"note": "indexia", "essay": "indexia", "journal": "indexia", "verse": "perceptua",
+           "post": "misc"}
 
 # The corpora a prompt may cite. `render.validate` refuses provenance outside this list: a
 # prompt naming a source that does not exist is a prompt whose material cannot be opened,

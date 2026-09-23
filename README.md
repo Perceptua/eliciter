@@ -209,11 +209,13 @@ rules `prompts.py` held:
 - **The machine proposes the site; the human writes** — indexia's spec §8.2 boundary. Every
   ask names a site and a shape and stops. A session has now read the corpus, so it is
   *more* able to state the thesis than the old generator was, and is told at length not to.
-- **The four registers are a closed set** — `note`, `verse`, `essay`, `journal` — because
+- **The five registers are a closed set** — `note`, `verse`, `post`, `essay`, `journal` — because
   `write.sh` routes on them. `length` and `project` are *derived* from the register in
   `render.validate`, never chosen, so there is no way to ask for verse and route to indexia.
   Which register a thing wants is now a judgement rather than a property of its source: a
-  recording is not automatically a journal entry.
+  recording is not automatically a journal entry. `post` (short, pithy, presenting
+  something you have been reading or thinking about to an audience) has no publishing home
+  yet, so it routes to eliciter's own `misc/` folder as `misc/post-<date>-<slug>.md`.
 - **Papers prompt once marked read, never while queued.** A prompt asks for the claim you
   took from something, which does not exist until you have read it.
 - **audua sessions are eligible by recency, not a one-shot queue.** A session recorded
@@ -310,10 +312,10 @@ bash scripts/write.sh indexia  # a session there, no particular prompt
 bash scripts/write.sh 3 --print  # show the brief and command; launch nothing
 ```
 
-It resolves the prompt, works out whether it belongs to **indexia** (note, essay, journal)
-or **perceptua** (verse), and starts a Claude Code session in that directory seeded with a
-brief: the ask, the material, where the result goes. Then it stops — the drafting and the
-committing happen there, with that project's own tools.
+It resolves the prompt, works out whether it belongs to **indexia** (note, essay, journal),
+**perceptua** (verse) or **misc** (post), and starts a Claude Code session in that directory
+seeded with a brief: the ask, the material, where the result goes. Then it stops — the
+drafting and the committing happen there, with that project's own tools.
 
 Note prompts render the exact `indexia/staging/<id>.md` filename and header, so committing
 is a copy plus indexia's `ingest-staging`. Ids are minted from one base instant plus the
@@ -432,7 +434,7 @@ eliciterlib/
   audua.py     audua adapter: recent (30d) session summaries → Signals
   posts.py     perceptua adapter: posts worth answering
   misc.py      misc adapter: dropped writing + scanned pages, read in full
-  signals.py   Signal, the four registers, and what each one routes to
+  signals.py   Signal, the five registers, and what each one routes to
   material.py  every source → state/material.json, for a session to read
   render.py    validate what a session wrote → prompts/latest.md
   webui.py     the JSON API behind the UI

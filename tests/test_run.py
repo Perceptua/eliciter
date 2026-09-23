@@ -113,5 +113,24 @@ class TestRun(unittest.TestCase):
         r.mark(1, "written", expect_title="A claim")     # the title it really has
 
 
+class TestPostRegister(unittest.TestCase):
+    """`post` routes to misc/ and gets a file there, the way a note gets a staging id."""
+
+    def test_post_is_derived_short_and_misc(self):
+        [p] = render.validate([
+            {"register": "post", "title": "Thought as motion: a reading note!",
+             "ask": "Present it.",
+             "sources": [{"source": "misc", "ref": "thought-as-motion-in-the-soul.md"}]}])
+        self.assertEqual((p["length"], p["project"]), ("short", "misc"))
+        self.assertRegex(p["commit"],
+                         r"^misc/post-\d{4}-\d{2}-\d{2}-thought-as-motion-a-reading-note\.md")
+
+    def test_a_given_commit_wins(self):
+        [p] = render.validate([
+            {"register": "post", "title": "t", "ask": "a", "commit": "misc/mine.md",
+             "sources": [{"source": "misc", "ref": "x.md"}]}])
+        self.assertEqual(p["commit"], "misc/mine.md")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

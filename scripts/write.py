@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Open a writing session in indexia or perceptua, seeded with a prompt.
+"""Open a writing session in indexia, perceptua or misc, seeded with a prompt.
 
 eliciter is read-only over both projects, so the writing happens *there*, in a session that
 has that project's own tools, skills and conventions. This is the handoff: it resolves a
@@ -32,6 +32,9 @@ PROJECT_DIRS = {
     "indexia": lambda: os.environ["ELICITER_INDEXIA_ROOT"],
     # posts live at <repo>/_posts, so the project root is its parent.
     "perceptua": lambda: os.path.dirname(os.path.abspath(config.posts_dir())),
+    # Posts have no publishing home yet, so they are written into eliciter's own misc/
+    # folder — the one directory eliciter may write into (see the scan-misc skill).
+    "misc": lambda: config.misc_dir(),
 }
 
 
@@ -85,12 +88,20 @@ def seed_text(p):
     if p.get("material"):
         lines += ["", "The part that prompted it:", "", "```", p["material"].strip(), "```"]
 
-    lines += [
-        "",
-        "Help me write it here. eliciter gathered this read-only and cannot commit "
-        "anything; this project's own tools do that. Ask me what I actually think before "
-        "drafting — the claim should be mine.",
-    ]
+    if p.get("project") == "misc":
+        lines += [
+            "",
+            "Help me write it here, as a short post for other people to read, and save it "
+            "to the file named above in this folder. Ask me what I actually think before "
+            "drafting — the claim should be mine.",
+        ]
+    else:
+        lines += [
+            "",
+            "Help me write it here. eliciter gathered this read-only and cannot commit "
+            "anything; this project's own tools do that. Ask me what I actually think before "
+            "drafting — the claim should be mine.",
+        ]
     return "\n".join(lines)
 
 
@@ -116,7 +127,7 @@ def main():
     p = argparse.ArgumentParser(prog="write", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("target", nargs="?",
-                   help="a prompt number, or a project name (indexia|perceptua)")
+                   help="a prompt number, or a project name (indexia|perceptua|misc)")
     p.add_argument("--print", dest="dry", action="store_true",
                    help="show the brief and the command; launch nothing")
     a = p.parse_args()

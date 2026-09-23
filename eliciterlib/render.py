@@ -12,7 +12,7 @@ artifact a session produces — the JSON — and the markdown is a rendering of 
 here, never by hand.
 
 `validate()` is the other half of that contract. A session is a good writer and an unreliable
-typist: it will produce a register that is not one of the four, or omit `project`, or number
+typist: it will produce a register that is not one of the five, or omit `project`, or number
 the prompts from zero. Everything derivable is derived here rather than trusted — `length`
 and `project` come from the register via `signals.py`, and `n` is assigned by position — so
 the only things a session actually has to get right are the ones only it can: the ask, the
@@ -22,6 +22,7 @@ House style is indexia's `recent/*.md`: a title, an italic provenance line sayin
 generated the file and when it is overwritten, then sections. A run that finds nothing says
 *why* — "quiet" and "broken" look identical in an empty file, and only one is your problem.
 """
+import re
 from datetime import datetime, timedelta, timezone
 
 from .run import status_of
@@ -44,6 +45,14 @@ def _staging_commit(index):
     sid = dt.strftime("%Y%m%dT%H%M%S") + f"{dt.microsecond // 1000:03d}Z"
     return (f"indexia/staging/{sid}.md — header then `---` then the body:\n"
             "   title: <your claim, as a sentence>")
+
+
+def _post_commit(title):
+    """A post's file in misc/: dated, and prefixed so it reads as yours-for-an-audience
+    beside the fragments and scans that share the folder. misc.py titles a file from its
+    name, so the slug is the title — a post read back as material is recognisable."""
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:60].rstrip("-") or "post"
+    return f"misc/post-{_RUN_BASE.strftime('%Y-%m-%d')}-{slug}.md — the post itself, no front matter"
 
 SOURCE_HEADINGS = {
     "across": "Across your sources — what keeps recurring",
@@ -141,11 +150,12 @@ def validate(raw):
             "ask": str(p["ask"]).strip(),
             "because": str(p.get("because") or "").strip(),
             # A session may say where a thing goes; when it does not, a note gets the
-            # staging path minted above and everything else gets nothing. Derived rather
+            # staging path minted above, a post its misc/ file, and everything else nothing. Derived rather
             # than asked for, because a session cannot mint a *unique* id per prompt
             # without being told this rule, and getting it wrong loses a draft.
             "commit": (str(p.get("commit") or "").strip()
-                       or (_staging_commit(i) if register == "note" else "")),
+                       or (_staging_commit(i) if register == "note" else "")
+                       or (_post_commit(str(p["title"]).strip()) if register == "post" else "")),
             "sources": sources,
             "material": str(p.get("material") or "").strip(),
             **decided,
