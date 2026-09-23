@@ -23,6 +23,7 @@ API notes, learned the hard way:
     of the window instead of walking the whole category.
 """
 import re
+import subprocess
 import time
 import urllib.error
 import urllib.parse
@@ -45,6 +46,34 @@ def _text(el, path):
     return " ".join(node.text.split()) if node is not None and node.text else ""
 
 
+_use_curl = False    # set once arxiv's edge has refused urllib; see _get
+
+
+def _curl(url, timeout):
+    """The same GET through the curl binary.
+
+    From 2026-09-23 arxiv's CDN answers Python's urllib with 406 Not Acceptable, in ~12ms
+    and with an empty body, while curl sending urllib's exact headers gets 200 on the same
+    uncached query — so the refusal is keyed on the TLS client, not on anything in the
+    request. Cached URLs still come back 200 to urllib, which is what makes it look
+    intermittent. curl is the way round it; the stdlib has no knob for its TLS fingerprint.
+    """
+    try:
+        r = subprocess.run(
+            ["curl", "-sS", "--fail-with-body", "--max-time", str(timeout),
+             "-A", USER_AGENT, "-w", "\n%{http_code}", url],
+            capture_output=True, timeout=timeout + 10)
+    except FileNotFoundError:
+        raise SystemExit("arxiv refuses Python's HTTP client (HTTP 406) and there is no curl "
+                         "on PATH to fall back to — install curl")
+    body, _, code = r.stdout.rpartition(b"\n")
+    if r.returncode == 0 and code == b"200":
+        return body
+    if code.isdigit() and code != b"000":
+        raise SystemExit(f"arxiv returned HTTP {code.decode()} (via curl) for {url}")
+    raise OSError(r.stderr.decode(errors="replace").strip() or f"curl exited {r.returncode}")
+
+
 def _get(url, timeout=60, tries=3, log=None):
     """GET with a couple of retries.
 
@@ -52,16 +81,27 @@ def _get(url, timeout=60, tries=3, log=None):
     sweeps here — and a weekly job that gives up on one blip is a weekly job that silently
     skips a week. Backoff is linear off the politeness delay rather than aggressive:
     the failure mode to avoid is hammering a public API that is already unhappy.
+
+    A 406 means arxiv is refusing urllib itself (see `_curl`); the request is retried
+    through curl, and the rest of the process goes straight to curl.
     """
+    global _use_curl
     last = None
     for attempt in range(1, tries + 1):
         try:
+            if _use_curl:
+                return _curl(url, timeout)
             req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 if r.status != 200:
                     raise SystemExit(f"arxiv returned HTTP {r.status} for {url}")
                 return r.read()
         except urllib.error.HTTPError as e:
+            if e.code == 406 and not _use_curl:
+                if log:
+                    log("[arxiv] HTTP 406 to urllib — switching to curl")
+                _use_curl = True
+                return _get(url, timeout, tries, log)
             raise SystemExit(f"arxiv returned HTTP {e.code} — {e.reason}")
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             last = e

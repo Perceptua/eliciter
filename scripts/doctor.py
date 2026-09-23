@@ -14,7 +14,6 @@ The gate is checked too: the last line is not "sources are up" but "sources are 
 import argparse
 import os
 import sys
-import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -170,14 +169,20 @@ def c_candidates():
 
 
 def c_arxiv():
-    req = urllib.request.Request(
-        "https://export.arxiv.org/api/query?search_query=cat:cs.AI&max_results=1",
-        headers={"User-Agent": "eliciter/1.0 preflight"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        body = r.read()
-    if r.status != 200 or b"<entry" not in body:
-        return BAD, f"HTTP {r.status}, {len(body)} bytes, no entries"
-    return OK, "export.arxiv.org reachable over HTTPS"
+    # Through arxiv._get, so the preflight exercises the same transport (and the same
+    # curl fallback) the sweep and search use. A random `start` keeps the CDN cache out of
+    # it: a cached URL answers urllib 200 even while uncached ones are refused.
+    import random
+    from eliciterlib import arxiv
+    try:
+        body = arxiv._get(f"{arxiv.API}?search_query=cat:cs.AI&start={random.randint(0, 999)}"
+                          "&max_results=1", timeout=30, tries=1)
+    except SystemExit as e:
+        return BAD, str(e)
+    if b"<entry" not in body:
+        return BAD, f"{len(body)} bytes, no entries"
+    via = " (via curl — arxiv refuses urllib)" if arxiv._use_curl else ""
+    return OK, f"export.arxiv.org reachable over HTTPS{via}"
 
 
 def main():
