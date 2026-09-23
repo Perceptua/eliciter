@@ -29,7 +29,7 @@ DEFAULTS = {
     "ELICITER_ARXIV_LOOKBACK_DAYS": "7",
     "ELICITER_ARXIV_MAX_RESULTS": "300",
     "ELICITER_ARXIV_DELAY": "3.0",
-    "ELICITER_ARXIV_KEEP": "10",
+    "ELICITER_ARXIV_KEEP": "3",
     "ELICITER_INTERESTS": (
         "agency, agents, goal-directed behaviour, collective intelligence, basal cognition, "
         "morphogenesis, causal emergence, alignment, learnable novelty, autopoiesis, "

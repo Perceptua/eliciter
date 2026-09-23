@@ -1,7 +1,7 @@
 """The reading queue: which papers are waiting, read, or rejected.
 
 The digest is not a fresh list each week — it is a **queue that persists**, capped at
-`ELICITER_ARXIV_KEEP` (10). A sweep does not replace it; it tops it up. So a paper you have
+`ELICITER_ARXIV_KEEP` (3). A sweep does not replace it; it tops it up. So a paper you have
 not got to yet is still there next week, and one you rejected never comes back.
 
 That is the whole reason status is stored rather than derived. Three facts have to survive

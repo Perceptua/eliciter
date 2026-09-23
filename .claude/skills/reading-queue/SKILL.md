@@ -6,7 +6,7 @@ description: Sweep arxiv and choose the week's best papers for the user's readin
 # The reading queue
 
 eliciter replaces the old weekly Claude Desktop arxiv task. A sweep pulls the week — **on a
-real week, about 1160 papers** — and a persistent queue capped at `ELICITER_ARXIV_KEEP` (10)
+real week, about 1160 papers** — and a persistent queue capped at `ELICITER_ARXIV_KEEP` (3)
 holds what is worth reading. The queue is the point: a paper waits there until the user says
 what became of it.
 
