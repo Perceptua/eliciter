@@ -139,6 +139,14 @@ never write them yourself.
 | `essay` | long | indexia | something argued, holding several things together |
 | `journal` | long | indexia | dated, personal, against a day or a recording |
 | `verse` | short | perceptua | a poem — almost always a response to another poem |
+| `post` | short | misc | short and pithy, presenting something they have been reading or thinking about **to an audience** |
+
+`post` is the one register written for other people rather than for the corpus. The ask
+names what to present and to whom it is being presented — a paper they read, a page they
+wrote, a recording — and stops; what the post *says* about it is theirs, same as anywhere
+else. It has no publishing home yet, so it lands as a file in eliciter's own `misc/`
+(`misc/post-<date>-<slug>.md`, derived for you like a note's staging id), which means a
+written post comes back as `misc` material on the next gather.
 
 Two standing conventions, both still true:
 
@@ -195,7 +203,7 @@ bash scripts/write.sh 3 --print  # show the brief and the command, launch nothin
 ```
 
 `write.sh` resolves the prompt, works out whether it belongs to indexia (notes, essays,
-journal) or perceptua (verse), and starts a Claude Code session there seeded with a brief:
+journal), perceptua (verse) or misc (post), and starts a Claude Code session there seeded with a brief:
 the ask, every source with its ref, and where the result goes. That session has *not* read
 the corpus — you did — which is why naming the sources properly matters.
 
