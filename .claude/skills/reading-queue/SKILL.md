@@ -81,8 +81,8 @@ here rather than a scorer.
   organisms, morphogenesis, self-organization, causal emergence.
 - A paper that matches no stated interest but is obviously theirs is a **good** pick. That
   case is the reason you are reading the whole list.
-- **Fill the free slots, no more.** `free_slots` is in the candidate file. If only three
-  slots are free, pick the three best rather than ten and let seven overflow.
+- **Fill the free slots, no more.** `free_slots` is in the candidate file. If only one
+  slot is free, pick the single best rather than three and let two overflow.
 - If the week is genuinely thin, say so and queue fewer. A padded queue is worse than a
   short one — every slot taken by a mediocre paper is a slot the next sweep cannot use.
 
