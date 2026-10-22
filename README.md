@@ -3,7 +3,7 @@
 Reads what you've been reading, and asks you to write.
 
 It replaces the weekly Claude Desktop arxiv task with a local sweep, keeps a **reading
-queue** of at most ten papers whose status you control, and turns that queue — together
+queue** of at most three papers whose status you control, and turns that queue — together
 with your indexia notes, perceptua posts, misc dropped writing, and audua run recordings —
 into numbered writing prompts. **A script gathers; a Claude session judges.** Ask for
 prompts and everything the sources have to say is collected into one file, then read and
@@ -133,10 +133,10 @@ four hundred — printed above its abstract in `digest/latest.md`. The overlap s
 underneath as provenance. Before, the score *was* the reason, which is what made the queue
 hard to trust.
 
-### 2. At most ten papers, with status you control
+### 2. At most three papers, with status you control
 
 The digest is not a fresh list each week. It is a **queue that persists**, capped at
-`ELICITER_ARXIV_KEEP` (10), and a sweep tops it up rather than replacing it.
+`ELICITER_ARXIV_KEEP` (3), and a sweep tops it up rather than replacing it.
 
 | status | meaning |
 |---|---|
@@ -400,7 +400,7 @@ read from `indexia/docker/.env` at run time, so rotating it there is enough.
 |---|---|---|
 | `ELICITER_INTERESTS` | Levin-adjacent agency terms | the main dial; also the relevance gate |
 | `ELICITER_EXCLUDE` | `benchmark, refactor, payment, …` | seeded from real noise; tune it |
-| `ELICITER_ARXIV_KEEP` | `10` | queue cap |
+| `ELICITER_ARXIV_KEEP` | `3` | queue cap |
 | `ELICITER_ARXIV_CATEGORIES` | `cs.AI, cs.LG, cs.NE, q-bio.NC, nlin.AO` | |
 | `ELICITER_ARXIV_LOOKBACK_DAYS` | `7` | |
 | `ELICITER_ARXIV_MAX_RESULTS` | `300` | see below |
