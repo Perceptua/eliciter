@@ -175,6 +175,14 @@ Drafts appear on the Tweets tab, newest first. When one goes out, **Posted this 
 text into `tweets/`, where it becomes source material and voice evidence. **✗ Not this
 one** marks it rejected. `bash scripts/tweets.sh show` lists drafts and recent topics.
 
+**Revising a draft** that has not gone out: `bash scripts/tweets.sh revise <n> --text "…"`
+(and/or `--title "…"`). Never edit `state/tweets.json` by hand. The draft keeps its number,
+sources and status, and the old text goes into `revisions`. A posted draft is refused; if
+what went out differed from the draft, that is `posted <n> --text "…"`. When a session
+finds drafts with `revisions` in `previous_tweets.drafts`, read them: the edits the user
+made after calling it done are the plainest evidence of what the session missed, and
+belong in the lessons.
+
 ## Importing the archive
 
 ```bash

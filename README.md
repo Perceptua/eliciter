@@ -380,6 +380,10 @@ scripts/gather.sh → state/material.json ──────────┤
 - **Lessons.** Each session ends by appending what it learned (what you engaged with, how
   much help you wanted, where the voice profile is wrong) to `state/tweet-lessons.md`. The
   next session reads that file first.
+- **Revising.** `scripts/tweets.sh revise <n> --text "…"` (or `--title "…"`) changes a
+  draft that has not gone out yet. It keeps its number and sources, and each earlier text
+  is kept under `revisions`, so the next session can see what changed after "done". A
+  posted draft cannot be revised.
 - **Posting.** "Posted this →" in the UI, or `scripts/tweets.sh posted <n>` (`--text` for
   what actually went out, if it changed), marks the draft and saves what you sent into `tweets/`
   through `tweetstore.py`. That is how tweets arrive from now on — and why each one feeds

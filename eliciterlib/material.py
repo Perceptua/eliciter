@@ -118,6 +118,7 @@ def _tweet_history():
                     "status": run.status_of(d, r.statuses),
                     "posted_text": d.get("posted_text", ""),
                     "created_at": d.get("created_at", ""),
+                    "revisions": [v.get("text", "") for v in d.get("revisions") or []],
                     "sources": [{"source": s.get("source"), "ref": s.get("ref")}
                                 for s in d.get("sources") or []]}
                    for d in r.prompts],

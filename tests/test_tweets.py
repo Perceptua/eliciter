@@ -293,6 +293,24 @@ class TestPost(Tmp):
             tweetrun.post(1, r=run.tweet_run(self.path))
         self.assertEqual(len(os.listdir(self.root)), 1)
 
+    def test_revise_keeps_history_and_refuses_posted(self):
+        d = tweetrun.revise(1, text="one, sharper", r=run.tweet_run(self.path))
+        self.assertEqual((d["n"], d["title"], d["length"]), (1, "A", 12))
+        tweetrun.revise(1, title="B", r=run.tweet_run(self.path))
+        d = run.tweet_run(self.path).find(1)
+        self.assertEqual((d["text"], d["title"]), ("one, sharper", "B"))
+        self.assertEqual([v["text"] for v in d["revisions"]], ["one"])
+        self.assertEqual(d["sources"][0]["source"], "tweets")
+        for kw in ({}, {"text": "one, sharper"}, {"text": "a" * 281}, {"title": " "}):
+            with self.assertRaises(tweetrun.InvalidTweets, msg=kw):
+                tweetrun.revise(1, r=run.tweet_run(self.path), **kw)
+        with self.assertRaises(KeyError):
+            tweetrun.revise(9, text="x", r=run.tweet_run(self.path))
+        tweetrun.post(1, r=run.tweet_run(self.path))
+        self.assertEqual(tweets.load(self.root)[0]["text"], "one, sharper")
+        with self.assertRaises(ValueError):
+            tweetrun.revise(1, text="later", r=run.tweet_run(self.path))
+
     def test_post_defaults_to_the_draft(self):
         tweetrun.post(1, r=run.tweet_run(self.path))
         self.assertEqual(tweets.load(self.root)[0]["text"], "one")

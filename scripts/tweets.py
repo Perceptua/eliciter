@@ -4,6 +4,8 @@
   scripts/tweets.sh show                       # drafts waiting, and recent topics
   scripts/tweets.sh draft --title "…" --source arxiv:2609.00075v1 --text "…"
   scripts/tweets.sh topic --title "…" --source misc:"x.txt" --outcome passed --note "why"
+  scripts/tweets.sh revise 3 --text "…"        # change a draft before it goes out
+  scripts/tweets.sh revise 3 --title "…"       # …or its topic label
   scripts/tweets.sh posted 3                   # it went out as drafted — saved to tweets/
   scripts/tweets.sh posted 3 --text "…"        # …or what went out, if you changed it
   scripts/tweets.sh reject 3                   # not posting it after all
@@ -45,11 +47,11 @@ def main():
     p = argparse.ArgumentParser(prog="tweets", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("action", nargs="?", default="show",
-                   choices=("show", "draft", "topic", *DECIDE, "voice-check", "voice-save"))
-    p.add_argument("n", nargs="?", type=int, help="which draft, for posted/reject/reopen")
+                   choices=("show", "draft", "topic", "revise", *DECIDE, "voice-check", "voice-save"))
+    p.add_argument("n", nargs="?", type=int, help="which draft, for revise/posted/reject/reopen")
     p.add_argument("--title", help="the topic, as a short label")
     p.add_argument("--source", action="append", default=[], help="<source>:<ref>[|title]")
-    p.add_argument("--text", help="the tweet (draft), or what went out (posted)")
+    p.add_argument("--text", help="the tweet (draft), its new text (revise), or what went out (posted)")
     p.add_argument("--because", default="", help="draft: why the topic was live")
     p.add_argument("--outcome", choices=tweetrun.TOPIC_OUTCOMES, help="topic: what became of it")
     p.add_argument("--note", default="", help="topic: why you passed, in a few words")
@@ -81,6 +83,14 @@ def main():
             e = tweetrun.log_topic(a.title, tweetrun.parse_sources(a.source), a.outcome,
                                    note=a.note)
             print(f"[tweets] topic logged: {e['title']} — {e['outcome']}")
+            return 0
+
+        if a.action == "revise":
+            if a.n is None:
+                raise SystemExit("which draft? e.g. `bash scripts/tweets.sh revise 3 --text \"…\"`")
+            d = tweetrun.revise(a.n, text=a.text, title=a.title)
+            print(f"[tweets] revised draft {d['n']} ({d['length']}/{tweetrun.LIMIT}) — "
+                  f"{d['title'][:50]}\n        {d['text']}")
             return 0
 
         if a.action in DECIDE:

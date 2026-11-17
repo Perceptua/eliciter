@@ -82,7 +82,7 @@ not predictable by the wrapper.
   `tweets/`, where it becomes source material and voice evidence. **✗ Not this one** and
   **↺ Back on offer** work as on Prompts. The run bar shows when the voice profile was
   built, flags it **stale** when tweets have changed since, and opens `state/voice.md`.
-  The CLI twin is `scripts/tweets.sh show|posted|reject|reopen`.
+  The CLI twin is `scripts/tweets.sh show|revise|posted|reject|reopen`.
 - **Queue** — unread papers, with score and the terms that matched. ✓ Read / ✗ Reject.
   Marking one read is also what makes it eligible for a writing prompt.
 - **Decided** — read and rejected, with "↺ Back to queue" to undo.

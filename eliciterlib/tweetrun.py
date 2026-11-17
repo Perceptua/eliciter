@@ -18,6 +18,9 @@ of it — `drafted`, `passed` (you turned it down), or `skipped` (the session ra
 time or you wrapped early). The next session reads it, so a topic you passed on is not
 pitched again unless something new has landed on it.
 
+A draft can be revised before it is posted (`revise`, `scripts/tweets.sh revise`). It
+keeps its number, and each earlier text is kept under `revisions`.
+
 Both lists only ever grow. Drafts are numbered by arrival (`n` is never reused), so the
 number on a card means the same draft for as long as the file exists.
 
@@ -96,6 +99,48 @@ def add_draft(text, title, sources, because="", r=None):
     draft = {"n": n, "title": title, "text": text, "length": weighted_length(text),
              "sources": srcs, "because": (because or "").strip(), "created_at": _now()}
     r.prompts.append(draft)
+    r.save()
+    return draft
+
+
+def revise(n, text=None, title=None, r=None):
+    """Change draft `n` before it goes out: its text, its title, or both. Returns the draft.
+
+    The draft keeps its number, sources and status. Each earlier text is kept under
+    `revisions` (`{text, at}`, oldest first): what changed between "done" in a session and
+    the moment of posting is exactly what the next session should learn from.
+
+    A posted draft is refused. What went out is recorded as it went out; if the posted text
+    differed from the draft, that is `post(n, text=…)`, not a revision.
+    """
+    r = r or run.tweet_run()
+    draft = r.find(n)
+    if draft is None:
+        raise KeyError(f"no draft {n} — there are {len(r.prompts)}")
+    if status_of(draft, TWEET_STATUSES) == "posted":
+        raise ValueError(f"draft {n} is already posted — what went out is "
+                         f"{draft.get('posted_file', 'in tweets/')}; it cannot be revised")
+    if text is None and title is None:
+        raise InvalidTweets("nothing to revise — give a new text, a new title, or both")
+    if title is not None:
+        title = str(title).strip()
+        if not title:
+            raise InvalidTweets("a draft needs a title — the topic it came from")
+    if text is not None:
+        text = _check_text(text)
+    changed = False
+    if text is not None and text != draft.get("text"):
+        draft.setdefault("revisions", []).append(
+            {"text": draft.get("text", ""), "at": draft.get("revised_at")
+             or draft.get("created_at", "")})
+        draft["text"], draft["length"] = text, weighted_length(text)
+        changed = True
+    if title is not None and title != draft.get("title"):
+        draft["title"] = title
+        changed = True
+    if not changed:
+        raise InvalidTweets(f"draft {n} already says that — nothing changed")
+    draft["revised_at"] = _now()
     r.save()
     return draft
 
