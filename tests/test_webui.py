@@ -155,19 +155,16 @@ class TestRoutes(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             path, root = os.path.join(d, "tweets.json"), os.path.join(d, "tweets")
             os.makedirs(root)
-            with open(path, "w", encoding="utf-8") as fh:
-                json.dump({"cards": tweetrun.validate([
-                    {"title": "A", "site": "s", "drafts": ["one", "two"],
-                     "sources": [{"source": "misc", "ref": "x.md"}]}])}, fh)
+            tweetrun.add_draft("one", "A", [{"source": "misc", "ref": "x.md"}],
+                               r=run.tweet_run(path))
             with mock.patch.object(run, "tweets_path", lambda: path), \
                     mock.patch.dict(os.environ, {"ELICITER_TWEETS_DIR": root}):
-                code, _ = self.post("/api/tweet", {"n": 1, "status": "posted", "draft": 1,
+                code, _ = self.post("/api/tweet", {"n": 1, "status": "posted",
                                                    "title": "not A"})
                 self.assertEqual(code, 409)
                 self.assertEqual(os.listdir(root), [])
                 code, body = self.post("/api/tweet", {"n": 1, "status": "posted",
-                                                      "draft": 1, "text": "one!",
-                                                      "title": "A"})
+                                                      "text": "one!", "title": "A"})
                 self.assertEqual(code, 200, body[:300])
                 card = json.loads(body)["tweets"][0]
                 self.assertEqual((card["status"], card["posted_text"]), ("posted", "one!"))

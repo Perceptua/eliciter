@@ -11,9 +11,9 @@ turned into prompts by a session — not by a rule. Nothing runs on a schedule, 
 prompts stays exactly as it is until you decide to replace it. When you want to write one,
 it opens a session in the project where the writing belongs.
 
-One tab breaks the rule on purpose. **Tweets** carries drafted tweets in your voice — the
-only place eliciter writes prose for you — built from a voice profile a session maintains
-from your tweets and the rest of your writing. See [Tweets](#6-tweets-the-one-place-it-drafts).
+**Tweets** are written in a conversation: a session pitches topics from your recent
+reading and writing, you write the tweet together, and each one you call finished waits on
+the Tweets tab until you post it. See [Tweets](#6-tweets-composed-in-conversation).
 
 It **cannot write to indexia, perceptua, audua, or misc**. That is enforced by code and by
 tests, not by convention. `tweets/` has exactly one writer, for two acts you take: importing
@@ -28,7 +28,7 @@ make queue     # what is waiting to be read
 make gather    # read every source            → state/material.json  (the skill does this)
 make prompts   # render what a session wrote  → prompts/latest.md
 make write     # list prompts; then scripts/write.sh <n>
-make tweets    # render the tweet cards a session wrote → prompts/tweets-latest.md
+make tweets    # your finalized tweet drafts, and the topics pitched lately
 make import-tweets ARCHIVE=~/Downloads/twitter.zip  # your X archive → tweets/
 make test      # the read-only gate, and every route still answers
 ```
@@ -48,8 +48,8 @@ bash scripts/ui.sh status
 
 Six tabs — **Prompts** (with source, register and target project, the material shown in
 place, one click to open any source it names, and ✓/✗ to say you wrote one or that it is
-not for you), **Tweets** (cards with 2–3 drafts each, a character count, copy, and "Posted
-this" to save what you sent), **Queue** (unread, with the terms that
+not for you), **Tweets** (tweets you finalized in a session, with a character count, copy,
+and "Posted this" to save what you sent), **Queue** (unread, with the terms that
 matched, one click to read/reject), **Decided** (with undo), **Sources** (everything
 eliciter can read — every note, post, misc file, tweet, recording and paper — each openable in the
 reader),
@@ -329,21 +329,30 @@ Note prompts render the exact `indexia/staging/<id>.md` filename and header, so 
 is a copy plus indexia's `ingest-staging`. Ids are minted from one base instant plus the
 prompt index, so no two prompts in a run collide.
 
-### 6. Tweets: the one place it drafts
+### 6. Tweets, composed in conversation
 
-Everything above keeps indexia's §8.2 boundary — the machine names a site and stops. The
-Tweets tab is a deliberate exception, fenced to that tab: short writing for an audience is
-the case where a few drafts to choose from and edit are worth more than a blank box.
+The first version of this tab had a session batch out 2–3 drafts per topic in your voice.
+They were pastiche, and the design was dropped the same day. Now a tweet is written in a
+chat (the `elicit-tweets` skill):
+
+1. You say you want to write tweets.
+2. The session reads your recent material and finds up to three live topics. A paper you
+   read that your own writing has since taken up counts most.
+3. It pitches them one at a time, and you pass or engage.
+4. You write; it edits, counts and checks facts.
+5. Each tweet you call finished is saved as a draft on the Tweets tab.
+6. At the end, the session writes down what it learned for next time.
 
 ```
 your X archive ─ scripts/import-tweets.sh ─→ tweets/*.md  (one per tweet, gitignored)
                                                   │
 scripts/gather.sh → state/material.json ──────────┤
                                                   ↓
-                         a Claude session (elicit-tweets) ─→ state/voice.md   (when stale)
-                                                          └→ state/tweets.json
-                                                                  ↓
-                                          scripts/tweets.sh render · the Tweets tab
+               a conversation (elicit-tweets) ─→ topic pitched ─→ you pass / you write
+                                                                     ↓ "done"
+                                          scripts/tweets.sh draft ─→ state/tweets.json
+                                                                     ↓
+                                                              the Tweets tab
                                                                   ↓
                                     "Posted this" ─→ tweets/<date>-….md  (and voice goes stale)
 ```
@@ -359,13 +368,17 @@ scripts/gather.sh → state/material.json ──────────┤
   verbatim *Examples*, and *Yours* — a section you write by hand, which overrides the rest
   and which a rebuild is refused if it changes (`scripts/tweets.sh voice-check`). It is
   stamped with the tweet count it was built from, so it is reported **stale** the moment
-  that count changes. Nothing rebuilds it on a schedule; the next tweets run does, or you
+  that count changes. Nothing rebuilds it on a schedule; a tweet session offers to, or you
   ask.
-- **The cards.** Each names a site and its sources, then 2–3 drafts that differ in kind,
-  ≤280 characters as X counts them (URLs at 23). Validated by `tweetrun.validate`. A draft
-  may only state positions you have taken in your own writing.
-- **Posting.** "Posted this →" in the UI, or `scripts/tweets.sh posted <n> --draft <k>`
-  (`--text` for an edited version), marks the card and saves what you sent into `tweets/`
+- **Drafts and topics.** `state/tweets.json` holds the tweets you finalized (each checked
+  at ≤280 characters as X counts them, URLs at 23, with its sources). It also holds the
+  **topic log**: every topic pitched, and whether it was drafted, passed or skipped. A topic
+  you passed on is not pitched again unless something new lands on it. Both only grow.
+- **Lessons.** Each session ends by appending what it learned (what you engaged with, how
+  much help you wanted, where the voice profile is wrong) to `state/tweet-lessons.md`. The
+  next session reads that file first.
+- **Posting.** "Posted this →" in the UI, or `scripts/tweets.sh posted <n>` (`--text` for
+  what actually went out, if it changed), marks the draft and saves what you sent into `tweets/`
   through `tweetstore.py`. That is how tweets arrive from now on — and why each one feeds
   the next voice rebuild.
 
@@ -490,7 +503,7 @@ eliciterlib/
   tweets.py    tweets adapter: one .md per tweet, read in full
   tweetstore.py  the one writer into tweets/ (import, "posted")
   voice.py     the voice profile: staleness, the rebuild check, the stamp
-  tweetrun.py  validate a session's tweet cards → prompts/tweets-latest.md; posting
+  tweetrun.py  save a finalized tweet as a draft; log a pitched topic; posting
   signals.py   Signal, the registers, and what each one routes to
   material.py  every source → state/material.json, for a session to read
   render.py    validate what a session wrote → prompts/latest.md

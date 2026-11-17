@@ -42,8 +42,8 @@ gather:            ## read every source into state/material.json (the skill does
 prompts:           ## validate + render the prompts a session wrote
 	@bash scripts/prompts.sh render
 
-tweets:            ## validate + render the tweet cards a session wrote
-	@bash scripts/tweets.sh render
+tweets:            ## your finalized tweet drafts, and recent topics
+	@bash scripts/tweets.sh show
 
 import-tweets:     ## import an X archive into tweets/ (ARCHIVE=path/to/archive.zip)
 	@test -n "$(ARCHIVE)" || { echo "usage: make import-tweets ARCHIVE=path/to/archive.zip"; exit 1; }

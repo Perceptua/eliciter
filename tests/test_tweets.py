@@ -3,10 +3,11 @@
   * the archive importer keeps what it should (media tweets' text, not their media) and
     cleans what it keeps;
   * tweetstore never overwrites and never writes outside its folder;
-  * a tweet run is validated the way X will judge it (280, URLs at 23);
+  * a finalized tweet is saved as a draft only if X would take it (280, URLs at 23), and
+    topics are logged;
   * a voice rebuild cannot drop a section or touch `## Yours`, and its stamp drives
     staleness;
-  * posting a card saves the text and marks the card, once.
+  * posting a draft saves the text and marks the draft, once.
 """
 import json
 import os
@@ -120,40 +121,51 @@ class TestStore(Tmp):
 SRC = [{"source": "tweets", "ref": "2024-03-05-1.md"}]
 
 
-class TestValidate(unittest.TestCase):
-    def card(self, **kw):
-        c = {"title": "t", "site": "s", "sources": SRC, "drafts": ["one", "two"]}
-        c.update(kw)
-        return c
+class TestDrafts(Tmp):
+    """Saving a tweet you finalized, and logging a topic — the only writes a session makes."""
 
-    def test_valid_and_derived(self):
-        [c] = tweetrun.validate([self.card()])
-        self.assertEqual((c["n"], c["lengths"]), (1, [3, 3]))
+    def setUp(self):
+        super().setUp()
+        self.r = run.tweet_run(os.path.join(self.tmp.name, "tweets.json"))
+
+    def test_add_and_number(self):
+        d1 = tweetrun.add_draft("one", "Topic", SRC, r=self.r)
+        d2 = tweetrun.add_draft("two", "Topic", SRC, r=self.r)
+        self.assertEqual((d1["n"], d2["n"], d1["length"]), (1, 2, 3))
+        again = run.tweet_run(self.r.path)
+        self.assertEqual([d["text"] for d in again.prompts], ["one", "two"])
 
     def test_length(self):
-        tweetrun.validate([self.card(drafts=["a" * 280, "b"])])
+        tweetrun.add_draft("a" * 280, "t", SRC, r=self.r)
         with self.assertRaises(tweetrun.InvalidTweets):
-            tweetrun.validate([self.card(drafts=["a" * 281, "b"])])
+            tweetrun.add_draft("a" * 281, "t", SRC, r=self.r)
         # A long URL costs 23, so this fits although it is 300+ characters raw.
         url = "https://example.org/" + "x" * 200
         self.assertEqual(tweetrun.weighted_length("a " + url), 25)
-        tweetrun.validate([self.card(drafts=["a" * 250 + " " + url, "b"])])
+        tweetrun.add_draft("a" * 250 + " " + url, "t", SRC, r=self.r)
 
-    def test_draft_count_and_duplicates(self):
-        for drafts in (["one"], ["1", "2", "3", "4"], ["same", "same"], ["ok", ""]):
-            with self.assertRaises(tweetrun.InvalidTweets, msg=drafts):
-                tweetrun.validate([self.card(drafts=drafts)])
+    def test_required_fields_and_sources(self):
+        for text, title, sources in (("", "t", SRC), ("x", "", SRC), ("x", "t", []),
+                                     ("x", "t", [{"source": "twitter", "ref": "x"}])):
+            with self.assertRaises(tweetrun.InvalidTweets, msg=(text, title, sources)):
+                tweetrun.add_draft(text, title, sources, r=self.r)
+        self.assertEqual(run.tweet_run(self.r.path).prompts, [])
 
-    def test_sources_required_and_known(self):
-        for sources in ([], [{"source": "twitter", "ref": "x"}]):
-            with self.assertRaises(tweetrun.InvalidTweets):
-                tweetrun.validate([self.card(sources=sources)])
+    def test_source_specs(self):
+        self.assertEqual(
+            tweetrun.parse_sources(["arxiv:2609.00075v1", "misc:a: b.txt|A title"]),
+            [{"source": "arxiv", "ref": "2609.00075v1", "title": ""},
+             {"source": "misc", "ref": "a: b.txt", "title": "A title"}])
+        with self.assertRaises(tweetrun.InvalidTweets):
+            tweetrun.parse_sources(["no-colon"])
 
-    def test_decision_survives(self):
-        [c] = tweetrun.validate([self.card(status="posted", decided_at="2026-11-17",
-                                           posted_text="one", posted_draft=1)])
-        self.assertEqual((c["status"], c["posted_text"]), ("posted", "one"))
-        self.assertIn("✓ posted", tweetrun.render([c]))
+    def test_topic_log(self):
+        tweetrun.log_topic("Fungal memory", SRC, "passed", note="not funny", r=self.r)
+        with self.assertRaises(tweetrun.InvalidTweets):
+            tweetrun.log_topic("x", SRC, "maybe", r=self.r)
+        [t] = run.tweet_run(self.r.path).meta["topics"]
+        self.assertEqual((t["title"], t["outcome"], t["note"]),
+                         ("Fungal memory", "passed", "not funny"))
 
 
 PROFILE = """# Voice
@@ -221,9 +233,7 @@ class TestPost(Tmp):
     def setUp(self):
         super().setUp()
         self.path = os.path.join(self.tmp.name, "tweets.json")
-        with open(self.path, "w", encoding="utf-8") as fh:
-            json.dump({"cards": tweetrun.validate([
-                {"title": "A", "site": "s", "sources": SRC, "drafts": ["one", "two"]}])}, fh)
+        tweetrun.add_draft("one", "A", SRC, r=run.tweet_run(self.path))
         p = mock.patch.dict(os.environ, {"ELICITER_TWEETS_DIR": self.root})
         p.start()
         self.addCleanup(p.stop)
@@ -231,18 +241,22 @@ class TestPost(Tmp):
     def test_post_saves_then_marks_once(self):
         r = run.tweet_run(self.path)
         with self.assertRaises(run.StaleRun):
-            tweetrun.post(1, draft=1, title="not A", r=r)
+            tweetrun.post(1, title="not A", r=r)
         self.assertEqual(os.listdir(self.root), [])
 
-        tweetrun.post(1, draft=2, text="two, but better", title="A", r=r)
+        tweetrun.post(1, text="one, but better", title="A", r=r)
         [t] = tweets.load(self.root)
-        self.assertEqual(t["text"], "two, but better")
-        c = run.tweet_run(self.path).find(1)
-        self.assertEqual((c["status"], c["posted_draft"], c["posted_file"]),
-                         ("posted", 2, t["file"]))
+        self.assertEqual(t["text"], "one, but better")
+        d = run.tweet_run(self.path).find(1)
+        self.assertEqual((d["status"], d["posted_text"], d["posted_file"]),
+                         ("posted", "one, but better", t["file"]))
         with self.assertRaises(ValueError):
-            tweetrun.post(1, draft=1, r=run.tweet_run(self.path))
+            tweetrun.post(1, r=run.tweet_run(self.path))
         self.assertEqual(len(os.listdir(self.root)), 1)
+
+    def test_post_defaults_to_the_draft(self):
+        tweetrun.post(1, r=run.tweet_run(self.path))
+        self.assertEqual(tweets.load(self.root)[0]["text"], "one")
 
 
 if __name__ == "__main__":

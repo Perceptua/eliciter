@@ -97,7 +97,7 @@ def _clean_sources(raw):
 
 
 def sources_for(item, where):
-    """A prompt's or a tweet card's `sources`, cleaned and checked. Shared by both runs so
+    """A prompt's or a tweet draft's `sources`, cleaned and checked. Shared by both runs so
     "every item names real material from a known corpus" means the same thing in each."""
     sources = _clean_sources(item.get("sources"))
     if not sources:

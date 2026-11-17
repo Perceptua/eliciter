@@ -1,36 +1,32 @@
 #!/usr/bin/env python3
-"""Validate, render and decide the tweet cards a session wrote; check and install the voice.
+"""Save, list and decide the tweets you finalize in a session; check and install the voice.
 
-  scripts/tweets.sh render                 # state/tweets.json → prompts/tweets-latest.md
-  scripts/tweets.sh check                  # validate only; write nothing
-  scripts/tweets.sh show                   # what is on offer, one line each
-  scripts/tweets.sh posted 3 --draft 2     # you posted draft 2 of card 3 — saved to tweets/
-  scripts/tweets.sh posted 3 --text "…"    # …or what you actually posted, after editing
-  scripts/tweets.sh reject 3               # not this one
-  scripts/tweets.sh reopen 3               # undo either
-  scripts/tweets.sh voice-check            # validate state/voice.next.md; write nothing
-  scripts/tweets.sh voice-save             # validate it, stamp it, install as state/voice.md
+  scripts/tweets.sh show                       # drafts waiting, and recent topics
+  scripts/tweets.sh draft --title "…" --source arxiv:2609.00075v1 --text "…"
+  scripts/tweets.sh topic --title "…" --source misc:"x.txt" --outcome passed --note "why"
+  scripts/tweets.sh posted 3                   # it went out as drafted — saved to tweets/
+  scripts/tweets.sh posted 3 --text "…"        # …or what went out, if you changed it
+  scripts/tweets.sh reject 3                   # not posting it after all
+  scripts/tweets.sh reopen 3                   # undo either
+  scripts/tweets.sh voice-check                # validate state/voice.next.md; write nothing
+  scripts/tweets.sh voice-save                 # validate it, stamp it, install as voice.md
 
-The tweets counterpart of `scripts/prompts.sh`, and built the same way: a session writes
-`state/tweets.json` having read `state/material.json` and `state/voice.md`, and this
-validates and renders it. Everything derivable is derived — card numbers, each draft's
-length as X counts it.
+**Tweets are composed in a conversation, not generated.** A session (the `elicit-tweets`
+skill) pitches a topic from your recent reading and writing; you pass or engage; you work
+the sentence together. `draft` is called only when you have said a tweet is done — it
+validates the length and the sources and appends it to `state/tweets.json`, where the
+Tweets tab shows it. `topic` records every topic pitched and what became of it, so the next
+session does not pitch a topic you turned down.
 
-`posted` does two things, and both are deliberate. It records the decision, the same field
-the Tweets tab writes; and it saves the text into `tweets/` as one `.md`, so what you
-posted becomes source material — and voice evidence — on the next gather. If you already
-posted it some other way, `--text` takes what actually went out.
+`--source` is `<source>:<ref>` (repeatable), with an optional `|title`:
+`--source "tweets:2021-09-29-1443267727976710150.md|a historian of the 28th century"`.
 
-A rebuilt voice profile is written to `state/voice.next.md` and installed with
-`voice-save`, which refuses a rebuild that is missing a section or that changed the
-hand-written `## Yours` section, then stamps it with the time and the tweet count. That
-stamp is what makes the next gather report the profile fresh or stale.
+`posted` saves the text into `tweets/` as one `.md`, so what you posted becomes source
+material — and voice evidence — on the next gather.
 """
 import argparse
-import json
 import os
 import sys
-from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -39,51 +35,29 @@ from eliciterlib import config                                       # noqa: E40
 config.bootstrap()
 
 from eliciterlib import run, tweetrun, tweets, voice                 # noqa: E402
-from eliciterlib.signals import TWEET_STATUSES                      # noqa: E402
+from eliciterlib.signals import TWEET_STATUSES                       # noqa: E402
 
 DECIDE = {"posted": "posted", "reject": "rejected", "reopen": "open"}
 MARK = {"open": " ", "posted": "✓", "rejected": "✗"}
-
-
-def load():
-    path = run.tweets_path()
-    if not os.path.isfile(path):
-        raise SystemExit(
-            f"no tweet cards yet ({path}).\n"
-            "Open a session here and ask for tweets — the elicit-tweets skill writes that "
-            "file.")
-    try:
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (OSError, ValueError) as e:
-        raise SystemExit(f"{path} is not readable JSON ({e})")
-    if isinstance(data, list):
-        return {"cards": data}
-    if not isinstance(data, dict):
-        raise SystemExit(f"{path}: expected an object or a list, got {type(data).__name__}")
-    return data
-
-
-def validated(data):
-    try:
-        return tweetrun.validate(data.get("cards"))
-    except tweetrun.InvalidTweets as e:
-        raise SystemExit(f"{run.tweets_path()}: {e}")
 
 
 def main():
     p = argparse.ArgumentParser(prog="tweets", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("action", nargs="?", default="show",
-                   choices=("render", "check", "show", *DECIDE, "voice-check", "voice-save"))
-    p.add_argument("n", nargs="?", type=int, help="which card, for posted/reject/reopen")
-    p.add_argument("--draft", type=int, help="which draft you posted (1-based)")
-    p.add_argument("--text", help="what you actually posted, if you edited it")
+                   choices=("show", "draft", "topic", *DECIDE, "voice-check", "voice-save"))
+    p.add_argument("n", nargs="?", type=int, help="which draft, for posted/reject/reopen")
+    p.add_argument("--title", help="the topic, as a short label")
+    p.add_argument("--source", action="append", default=[], help="<source>:<ref>[|title]")
+    p.add_argument("--text", help="the tweet (draft), or what went out (posted)")
+    p.add_argument("--because", default="", help="draft: why the topic was live")
+    p.add_argument("--outcome", choices=tweetrun.TOPIC_OUTCOMES, help="topic: what became of it")
+    p.add_argument("--note", default="", help="topic: why you passed, in a few words")
     a = p.parse_args()
 
-    if a.action in ("voice-check", "voice-save"):
-        n_now = tweets.count()
-        try:
+    try:
+        if a.action in ("voice-check", "voice-save"):
+            n_now = tweets.count()
             if a.action == "voice-check":
                 draft = voice._read(voice.draft_path())
                 if draft is None:
@@ -91,70 +65,57 @@ def main():
                 voice.check(draft, voice._read(voice.path()))
                 print(f"[voice] {voice.draft_path()} is valid — `voice-save` installs it")
             else:
-                dest = voice.install(n_now)
-                print(f"[voice] installed {dest} (built from {n_now} tweets)")
-        except voice.InvalidVoice as e:
-            raise SystemExit(f"[voice] {e}")
-        return 0
+                print(f"[voice] installed {voice.install(n_now)} (built from {n_now} tweets)")
+            return 0
 
-    if a.action in DECIDE:
-        if a.n is None:
-            raise SystemExit(f"which card? e.g. `bash scripts/tweets.sh {a.action} 3`")
-        try:
+        if a.action == "draft":
+            d = tweetrun.add_draft(a.text, a.title, tweetrun.parse_sources(a.source),
+                                   because=a.because)
+            print(f"[tweets] saved draft {d['n']} ({d['length']}/{tweetrun.LIMIT}) — "
+                  "it is on the Tweets tab")
+            return 0
+
+        if a.action == "topic":
+            if not a.outcome:
+                raise SystemExit("--outcome is required: drafted, passed or skipped")
+            e = tweetrun.log_topic(a.title, tweetrun.parse_sources(a.source), a.outcome,
+                                   note=a.note)
+            print(f"[tweets] topic logged: {e['title']} — {e['outcome']}")
+            return 0
+
+        if a.action in DECIDE:
+            if a.n is None:
+                raise SystemExit(f"which draft? e.g. `bash scripts/tweets.sh {a.action} 3`")
             if a.action == "posted":
-                card, path = tweetrun.post(a.n, draft=a.draft, text=a.text)
-                print(f"✓ {a.n}. {card.get('title', '')[:58]} — posted, saved to {path}")
+                d, path = tweetrun.post(a.n, text=a.text)
+                print(f"✓ {a.n}. {d.get('title', '')[:58]} — posted, saved to {path}")
                 return 0
             r = run.tweet_run()
             marked = r.mark(a.n, DECIDE[a.action])
             r.save()
-        except (KeyError, ValueError) as e:
-            raise SystemExit(str(e.args[0]) if e.args else str(e))
-        st = run.status_of(marked, r.statuses)
-        print(f"{MARK[st]} {a.n}. {marked.get('title', '')[:58]} — "
-              + ("back on offer" if st == "open" else st))
-        return 0
-
-    data = load()
-    cards = validated(data)
-
-    def listing(rows):
-        for c in rows:
-            lens = "/".join(str(n) for n in c["lengths"])
-            print(f"  {c['n']:>2}. {MARK[run.status_of(c, TWEET_STATUSES)]} "
-                  f"[{lens:<11}] {c['title'][:58]}")
-
-    if a.action == "check":
-        print(f"[tweets] {len(cards)} card(s), valid")
-        listing(cards)
-        return 0
-
-    if a.action == "show":
-        if not cards:
-            print("no cards — ask a session for tweets")
+            st = run.status_of(marked, TWEET_STATUSES)
+            print(f"{MARK[st]} {a.n}. {marked.get('title', '')[:58]} — "
+                  + ("back on offer" if st == "open" else st))
             return 0
-        print("on offer (draft lengths in brackets):\n")
-        listing(cards)
-        print("\nonce one is out:  bash scripts/tweets.sh posted <n> --draft <k>")
-        return 0
+    except (tweetrun.InvalidTweets, voice.InvalidVoice) as e:
+        raise SystemExit(f"[tweets] {e}")
+    except (KeyError, ValueError) as e:
+        raise SystemExit(str(e.args[0]) if e.args else str(e))
 
-    v = voice.load()
-    text = tweetrun.render(cards, stats={"gathered_at": data.get("gathered_at", ""),
-                                         "quiet": data.get("quiet", ""),
-                                         "voice_built_at": v["built_at"]})
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    out = config.out_dir("prompts")
-    for name in (f"tweets-{day}.md", "tweets-latest.md"):
-        with open(os.path.join(out, name), "w", encoding="utf-8") as fh:
-            fh.write(text)
-
-    with open(run.tweets_path(), "w", encoding="utf-8") as fh:
-        json.dump({"generated_at": datetime.now(timezone.utc).isoformat(),
-                   "gathered_at": data.get("gathered_at", ""),
-                   "quiet": data.get("quiet", ""),
-                   "cards": cards}, fh, indent=2, ensure_ascii=False)
-
-    print(f"[tweets] {len(cards)} card(s) → {os.path.join(out, 'tweets-latest.md')}")
+    # show
+    r = run.tweet_run()
+    if not r.prompts:
+        print("no drafts yet — open a session here and say you want to write tweets")
+    for d in r.prompts:
+        st = run.status_of(d, TWEET_STATUSES)
+        print(f"  {d['n']:>2}. {MARK[st]} [{d.get('length', '?'):>3}] {d.get('title', '')[:50]}")
+        print(f"        {d.get('posted_text') or d.get('text', '')}")
+    topics = r.meta.get("topics") or []
+    if topics:
+        print("\nrecent topics:")
+        for t in topics[-10:]:
+            print(f"  {t['at'][:10]}  {t['outcome']:<8} {t['title'][:60]}"
+                  + (f" — {t['note']}" if t.get("note") else ""))
     return 0
 
 

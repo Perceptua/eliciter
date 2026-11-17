@@ -142,12 +142,12 @@ never write them yourself.
 | `verse` | short | perceptua | a poem — almost always a response to another poem |
 
 **`post` is retired** (2026-11-17). Short writing for an audience moved to the Tweets tab,
-which works differently — it carries drafts, under its own skill (`elicit-tweets`). Do not
+which works differently: tweets are composed in a conversation, under their own skill
+(`elicit-tweets`). Do not
 write a `post` prompt: `check` refuses it. Old `post` prompts in a standing run, already
 decided, still render, and `misc/post-*.md` files they produced are ordinary misc material.
 
-**The rule above is unchanged here.** The Tweets tab drafting in their voice is a fenced
-exception for that tab only; nothing in `state/prompts.json` ever contains a draft.
+**The rule above is unchanged here.** Nothing in `state/prompts.json` ever contains a draft.
 
 Two standing conventions, both still true:
 

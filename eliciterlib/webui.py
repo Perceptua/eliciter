@@ -37,7 +37,7 @@ now (`state/material.json` → `state/prompts.json`; `state/candidates.json` →
 "Write this →" has always had.
 
 What is left is everything that is genuinely a fact or a decision *you* make: the queue and
-its statuses, the prompts and their material, the tweet cards and which one you posted,
+its statuses, the prompts and their material, the tweet drafts and which you posted,
 the source catalogue, and ad-hoc arxiv search
 with a one-click add — searching for a paper by name and queuing it is your call, not a
 ranking. So the page shows, opens, and records; it does not choose.
@@ -85,7 +85,7 @@ def state_payload():
     # what a prompt with no `status` field means (open) instead of each deciding for itself.
     listed = [{**p, "status": run.status_of(p)} for p in run.Run().prompts]
     tr = run.tweet_run()
-    cards = [{**c, "status": run.status_of(c, tr.statuses)} for c in tr.prompts]
+    drafts = [{**c, "status": run.status_of(c, tr.statuses)} for c in tr.prompts]
     # The voice line on the Tweets tab. A count of tweet files is one directory listing —
     # cheap enough to poll — and it is the same count the profile was stamped with.
     try:
@@ -101,7 +101,7 @@ def state_payload():
             "cap": config.i("ELICITER_ARXIV_KEEP"),
         },
         "prompts": listed,
-        "tweets": cards,
+        "tweets": drafts,
         "voice": {k: v.get(k) for k in ("exists", "built_at", "built_from", "tweets_now",
                                          "tweets_since", "stale")},
         "config": {
@@ -402,15 +402,16 @@ class Handler(BaseHTTPRequestHandler):
                     r.mark(body["n"], body["status"], expect_title=body.get("title"))
                     r.save()
                 return self._json(200, state_payload())
-            # The Tweets tab's decisions. `posted` also saves the text you posted into
+            # The Tweets tab's decisions about drafts you finalized in a session (the page
+            # never creates one). `posted` also saves the text you posted into
             # tweets/ (through tweetstore, the one writer there) — that is a record of what
             # you did, like marking a paper read, not the UI writing anything of its own.
             if url.path == "/api/tweet":
                 with _lock:
                     st = body["status"]
                     if st == "posted":
-                        tweetrun.post(int(body["n"]), draft=body.get("draft"),
-                                      text=body.get("text"), title=body.get("title"))
+                        tweetrun.post(int(body["n"]), text=body.get("text"),
+                                      title=body.get("title"))
                     else:
                         r = run.tweet_run()
                         r.mark(int(body["n"]), st, expect_title=body.get("title"))

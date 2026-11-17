@@ -21,7 +21,7 @@ Every field is optional, and so is the block itself: a bare `.md` or `.txt` drop
 hand is read too, dated from a `YYYY-MM-DD` filename prefix or else its mtime. The front
 matter is `key: value` lines and nothing more — no YAML dependency for five scalars.
 
-Tweets serve two readers. A session writing prompts or tweet cards may cite one like any
+Tweets serve two readers. A session writing prompts or pitching tweet topics may cite one like any
 other piece of your writing, and the session that builds the voice profile (`voice.py`)
 reads all of them as the evidence for how you sound when you are being brief.
 """

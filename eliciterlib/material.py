@@ -104,17 +104,38 @@ MAX_TWEETS_TOP = 100
 
 
 def _tweet_history():
-    """The standing tweet run, with what became of each card — the Tweets tab's
-    `previous_prompts`. A card you turned down is an answer; one you posted is done, and
-    `posted_text` is what you actually said, which is better voice evidence than any draft.
+    """What earlier tweet sessions did — the `elicit-tweets` skill's memory of itself.
+
+    `drafts` are tweets you finalized, with what became of them: `posted` (and the text
+    that actually went out — the best voice evidence there is), `rejected`, or still
+    `open`. `topics` is every topic a session pitched and its outcome; a `passed` topic is
+    an answer, and is not pitched again unless something new has landed on it.
     """
     r = run.tweet_run()
-    return [{"title": c.get("title", ""), "site": c.get("site", ""),
-             "status": run.status_of(c, r.statuses), "decided_at": c.get("decided_at", ""),
-             "posted_text": c.get("posted_text", ""),
-             "sources": [{"source": s.get("source"), "ref": s.get("ref")}
-                         for s in c.get("sources") or []]}
-            for c in r.prompts]
+    return {
+        "drafts": [{"n": d.get("n"), "title": d.get("title", ""),
+                    "text": d.get("text", ""),
+                    "status": run.status_of(d, r.statuses),
+                    "posted_text": d.get("posted_text", ""),
+                    "created_at": d.get("created_at", ""),
+                    "sources": [{"source": s.get("source"), "ref": s.get("ref")}
+                                for s in d.get("sources") or []]}
+                   for d in r.prompts],
+        "topics": r.meta.get("topics") or [],
+    }
+
+
+LESSONS = "tweet-lessons.md"
+
+
+def _tweet_lessons():
+    """`state/tweet-lessons.md` — what earlier tweet sessions learned about running one,
+    appended at each session's wrap-up. Plain text, read whole."""
+    p = os.path.join(config.out_dir("state"), LESSONS)
+    if not os.path.isfile(p):
+        return ""
+    with open(p, encoding="utf-8") as fh:
+        return fh.read()
 
 
 def _tweet_rows(every):
@@ -238,6 +259,7 @@ def gather(log=print, want_papers=True, want_graph=True, want_posts=True, want_m
             return rows
         attempt("tweets", _tweets, [])
         out["previous_tweets"] = _tweet_history()
+        out["tweet_lessons"] = _tweet_lessons()
 
     if want_audua:
         def _audua():

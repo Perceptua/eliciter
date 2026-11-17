@@ -142,20 +142,20 @@ class TestPostRegisterIsRetired(unittest.TestCase):
 
 
 class TestTweetRunDecisions(unittest.TestCase):
-    """The same `Run`, holding tweet cards: its own statuses, its own decision fields."""
+    """The same `Run`, holding tweet drafts: its own statuses, its own decision fields."""
 
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.dir.cleanup)
         self.path = os.path.join(self.dir.name, "tweets.json")
         with open(self.path, "w", encoding="utf-8") as fh:
-            json.dump({"cards": [{"n": 1, "title": "A", "drafts": ["x", "y"]}]}, fh)
+            json.dump({"drafts": [{"n": 1, "title": "A", "text": "x"}]}, fh)
 
     def test_posted_with_fields_then_reopened(self):
         r = run.tweet_run(self.path)
         with self.assertRaises(ValueError):
             r.mark(1, "written")                  # a prompt status, not a tweet one
-        r.mark(1, "posted", extra={"posted_text": "x", "posted_draft": 1})
+        r.mark(1, "posted", extra={"posted_text": "x", "posted_file": "f.md"})
         r.save()
         c = run.tweet_run(self.path).find(1)
         self.assertEqual((run.status_of(c, run.TWEET_STATUSES), c["posted_text"]),
@@ -164,7 +164,7 @@ class TestTweetRunDecisions(unittest.TestCase):
         r.mark(1, "open")
         r.save()
         c = run.tweet_run(self.path).find(1)
-        self.assertFalse({"status", "posted_text", "posted_draft"} & set(c))
+        self.assertFalse({"status", "posted_text", "posted_file"} & set(c))
 
     def test_unknown_decision_field_is_refused(self):
         with self.assertRaises(ValueError):

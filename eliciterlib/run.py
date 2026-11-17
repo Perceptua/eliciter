@@ -58,8 +58,8 @@ class Run:
     prompts are written back exactly as they were read, plus the status, so this can never
     reshape what a session wrote (that is `render.validate`'s job, on render).
 
-    The same class holds a run of tweet cards (`state/tweets.json`): pass
-    `statuses=TWEET_STATUSES, key="cards"` — see :func:`tweet_run`. The decisions,
+    The same class holds your tweet drafts (`state/tweets.json`): pass
+    `statuses=TWEET_STATUSES, key="drafts"` — see :func:`tweet_run`. The decisions,
     the atomic save and the staleness guard are identical; only the vocabulary differs.
     `self.prompts` is the item list either way.
     """
@@ -119,7 +119,7 @@ class Run:
         `expect_title` is the staleness guard described on :class:`StaleRun`: pass what you
         were looking at and a replaced run is refused rather than mis-decided.
 
-        `extra` is any further fields that belong to the decision — for a tweet card, the
+        `extra` is any further fields that belong to the decision — for a tweet draft, the
         text actually posted and which draft it came from. Only names in
         `decision_fields` are accepted, and every one of them is cleared before a new
         decision is recorded, so a decision never leaves half of itself behind.
@@ -169,6 +169,7 @@ def tweets_path():
 
 
 def tweet_run(path=None):
-    """The standing run of tweet cards — `state/tweets.json`, the Tweets tab's file."""
-    return Run(path or tweets_path(), statuses=TWEET_STATUSES, key="cards",
-               decision_fields=("posted_text", "posted_draft", "posted_file"))
+    """Your finalized tweet drafts — `state/tweets.json`, the Tweets tab's file. The topic
+    log rides along in `meta["topics"]` (see `tweetrun.log_topic`)."""
+    return Run(path or tweets_path(), statuses=TWEET_STATUSES, key="drafts",
+               decision_fields=("posted_text", "posted_file"))
