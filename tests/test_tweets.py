@@ -25,7 +25,7 @@ config.bootstrap()
 
 import importlib.util                                # noqa: E402
 
-from eliciterlib import run, tweetrun, tweets, tweetstore, voice   # noqa: E402
+from eliciterlib import material, run, tweetrun, tweets, tweetstore, voice  # noqa: E402
 
 _spec = importlib.util.spec_from_file_location(
     "_import_tweets", os.path.join(config.ROOT, "scripts", "import_tweets.py"))
@@ -166,6 +166,45 @@ class TestDrafts(Tmp):
         [t] = run.tweet_run(self.r.path).meta["topics"]
         self.assertEqual((t["title"], t["outcome"], t["note"]),
                          ("Fungal memory", "passed", "not funny"))
+
+
+class TestDormantTopics(unittest.TestCase):
+    """A passed topic stays down until something you read or wrote is newer than the pass."""
+
+    def data(self, topics):
+        return {
+            "previous_tweets": {"topics": topics},
+            "notes": {"recent": [{"id": "N1", "title": "old note",
+                                  "created_at": "2026-10-01 09:00:00.000"},
+                                 {"id": "N2", "title": "new note",
+                                  "created_at": "2026-11-20 09:00:00.000"}]},
+            "misc": [{"ref": "m.md", "title": "m", "date": "2026-10-02T00:00:00+00:00"}],
+            "posts": [], "tweets": [],
+            "papers": {"read": [{"ref": "2611.1", "title": "new paper",
+                                 "read_on": "2026-11-21"}]},
+        }
+
+    def topic(self, title, outcome, at):
+        return {"title": title, "outcome": outcome, "at": at, "sources": SRC, "note": ""}
+
+    def test_newer_material_is_listed_and_older_is_not(self):
+        [d] = material._dormant_topics(self.data(
+            [self.topic("Fungi", "passed", "2026-11-17T19:00:00+00:00")]))
+        self.assertEqual([e["ref"] for e in d["newer"]], ["2611.1", "N2"])
+
+    def test_nothing_newer_means_nothing_listed(self):
+        [d] = material._dormant_topics(self.data(
+            [self.topic("Fungi", "passed", "2026-12-01T00:00:00+00:00")]))
+        self.assertEqual(d["newer"], [])
+
+    def test_latest_outcome_wins_and_skipped_is_not_dormant(self):
+        out = material._dormant_topics(self.data([
+            self.topic("Fungi", "passed", "2026-11-01T00:00:00+00:00"),
+            self.topic("fungi", "drafted", "2026-11-02T00:00:00+00:00"),
+            self.topic("Time", "skipped", "2026-11-03T00:00:00+00:00"),
+            self.topic("Soul", "passed", "2026-11-04T00:00:00+00:00"),
+        ]))
+        self.assertEqual([d["title"] for d in out], ["Soul"])
 
 
 PROFILE = """# Voice

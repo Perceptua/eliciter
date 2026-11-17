@@ -125,6 +125,58 @@ def _tweet_history():
     }
 
 
+def _dormant_topics(data):
+    """Topics you passed on, each with everything you have read or written since.
+
+    A passed topic stays dormant until new material lands on it. *Whether* a newer note
+    or paper bears on a topic is a judgement, so it is the session's to make; what a
+    script can do is the date arithmetic, so the session never has to work out which of
+    five corpora moved after the pass. `newer` is that list: candidates, not verdicts. An
+    empty `newer` means nothing at all has happened since, and the topic stays down.
+
+    Only the latest outcome per topic counts. A topic re-pitched and passed again is
+    dormant from the later date; one that was drafted since is not dormant at all.
+    `skipped` is not here: a topic the session ran out of time for was never turned down.
+    """
+    latest = {}
+    for t in (data.get("previous_tweets") or {}).get("topics") or []:
+        latest[t.get("title", "").strip().lower()] = t
+    passed = [t for t in latest.values() if t.get("outcome") == "passed"]
+    if not passed:
+        return []
+
+    notes = data.get("notes") or {}
+    papers = data.get("papers") or {}
+    since = []                                  # (date, entry) for everything dated
+    for n in notes.get("recent") or []:
+        since.append((n.get("created_at") or "",
+                      {"source": "indexia", "ref": n.get("id"), "title": n.get("title"),
+                       "kind": "note"}))
+    for key, src in (("posts", "perceptua"), ("misc", "misc")):
+        for m in data.get(key) or []:
+            since.append((m.get("date") or "", {"source": src, "ref": m.get("ref"),
+                                                "title": m.get("title"), "kind": "writing"}))
+    for t in data.get("tweets") or []:
+        since.append((t.get("date") or "", {"source": "tweets", "ref": t.get("ref"),
+                                            "title": (t.get("text") or "")[:80],
+                                            "kind": "tweet"}))
+    for p in papers.get("read") or []:
+        since.append((p.get("read_on") or "", {"source": "arxiv", "ref": p.get("ref"),
+                                               "title": p.get("title"), "kind": "reading"}))
+
+    def norm(d):          # "2026-10-22 21:32:21.188", "2026-10-22T…", "2026-10-22" → sortable
+        return str(d).replace(" ", "T")[:19]
+
+    out = []
+    for t in passed:
+        at = norm(t.get("at") or "")
+        newer = [dict(e, date=norm(d)[:10]) for d, e in since if d and norm(d) > at]
+        out.append({"title": t.get("title"), "passed_at": (t.get("at") or "")[:10],
+                    "note": t.get("note", ""), "sources": t.get("sources") or [],
+                    "newer": sorted(newer, key=lambda e: e["date"], reverse=True)})
+    return out
+
+
 LESSONS = "tweet-lessons.md"
 
 
@@ -305,6 +357,9 @@ def gather(log=print, want_papers=True, want_graph=True, want_posts=True, want_m
                             for p in q.active()],
             }
         attempt("papers", _papers, {"read": [], "waiting": []})
+
+    if want_tweets and isinstance(out.get("previous_tweets"), dict):
+        out["previous_tweets"]["dormant"] = _dormant_topics(out)
 
     return out
 

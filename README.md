@@ -373,7 +373,10 @@ scripts/gather.sh → state/material.json ──────────┤
 - **Drafts and topics.** `state/tweets.json` holds the tweets you finalized (each checked
   at ≤280 characters as X counts them, URLs at 23, with its sources). It also holds the
   **topic log**: every topic pitched, and whether it was drafted, passed or skipped. A topic
-  you passed on is not pitched again unless something new lands on it. Both only grow.
+  you passed on stays **dormant**: it comes back only if you have read or written something
+  since that bears on it. The gather lists what is newer than each pass, and the session
+  judges whether it is relevant and says what is new when it re-pitches. With nothing new,
+  it stays down. A `skipped` topic (the session ran out of time) is never dormant. Both only grow.
 - **Lessons.** Each session ends by appending what it learned (what you engaged with, how
   much help you wanted, where the voice profile is wrong) to `state/tweet-lessons.md`. The
   next session reads that file first.

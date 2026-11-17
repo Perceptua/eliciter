@@ -26,6 +26,8 @@ gather → read → shortlist ≤3 topics ─┬→ pitch one ─→ pass  → l
    `state/voice.md` in full. Read three things first:
    - `tweet_lessons`: what earlier sessions learned. Follow it.
    - `previous_tweets.topics`: every topic pitched before, with its outcome.
+   - `previous_tweets.dormant`: topics they passed on, each with what they have read or
+     written since. See *Topics they passed on*.
    - `previous_tweets.drafts`: what they finalized, and what they actually posted.
 
    If a source is under `unavailable`, say so.
@@ -59,10 +61,31 @@ You are looking for **what they are actively thinking about**. In order of stren
 3. **Recent reading with no response yet.** These are the weakest. Pitch one only if the
    first two kinds are exhausted, and say plainly that nothing of theirs has answered it.
 
-Skip any topic that `previous_tweets.topics` shows as `passed`, unless something new has
-landed on it since. In that case say what is new. Skip topics already drafted or posted,
-unless they asked for more on it. Recordings and private notes may inform a topic, but a
-tweet must never quote or link private material without the user's say-so.
+### Topics they passed on: dormant until new material
+
+A topic the user passed on is **dormant**. It may be pitched again only if they have
+**read or written something since that bears on it**. `previous_tweets.dormant` lists each
+passed topic with `newer`: everything dated after the pass, meaning notes, misc, posts,
+tweets and papers marked read. That list is candidates, not verdicts.
+
+- **`newer` is empty:** nothing has happened since. The topic stays down. Do not pitch it,
+  and do not mention it.
+- **`newer` has items:** read them and judge whether any genuinely bears on the topic in
+  substance, not by shared words. A new note on Aristotle does not revive a passed topic
+  about fungi.
+  - **If one does,** the topic is eligible again, and its pitch must open with what is new:
+    "You passed on this on Nov 17; since then you read X and wrote Y." That way the user
+    is deciding about the new material, not the old pitch.
+  - **If none does,** it stays dormant.
+- **Re-pitched and passed again:** it is dormant again from the new date (log it as
+  `passed` like any other).
+
+**`skipped` is not dormant.** A topic you ran out of time for was never turned down, so it
+can be pitched again freely. Skip topics already drafted or posted, unless they asked for
+more on it.
+
+Recordings and private notes may inform a topic, but a tweet must never quote or link
+private material without the user's say-so.
 
 **Three is a ceiling, not a target.** If only one topic is genuinely live, pitch one. If
 nothing is, say so.
