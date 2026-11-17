@@ -6,16 +6,17 @@
   scripts/import-tweets.sh ~/Downloads/twitter-archive/data/tweets.js
   scripts/import-tweets.sh <any of those> --dry-run              # count, write nothing
 
-Kept: your own original tweets, including quote tweets. Skipped, and counted:
+Kept: your own original tweets, including quote tweets and tweets with a photo, video or
+GIF — for those, the text is kept and the media is not. Skipped, and counted:
 
   * **replies** — anything with `in_reply_to_status_id_str`, including replies to
     yourself, so the second and later tweets of a thread are skipped too.
   * **retweets** — they are someone else's words.
-  * **media tweets** — anything with an attached photo, video or GIF. The text of these
-    usually leans on the picture and does not stand alone.
+  * **media only** — a tweet that is nothing but a picture has no text to keep.
 
 The text is cleaned the way you would read it on the site: `&amp;` and friends are
-unescaped, and every `t.co` link is replaced with the URL it points to.
+unescaped, every `t.co` link is replaced with the URL it points to, and the `t.co` link X
+appends for attached media is removed, since it points at a picture that is not imported.
 
 Idempotent: a tweet already in tweets/ is left alone, so re-importing a newer archive
 adds only what is new. The archive is read in memory, so nothing is extracted to disk.
@@ -80,13 +81,23 @@ def classify(t):
     text = t.get("full_text") or t.get("text") or ""
     if t.get("retweeted") or text.startswith("RT @"):
         return "retweet"
-    if (t.get("entities") or {}).get("media") or (t.get("extended_entities") or {}).get("media"):
-        return "media"
+    if not clean_text(t):
+        return "media only"
     return None
+
+
+def _media(t):
+    return ((t.get("extended_entities") or {}).get("media")
+            or (t.get("entities") or {}).get("media") or [])
 
 
 def clean_text(t):
     text = t.get("full_text") or t.get("text") or ""
+    # The media itself is not imported, so neither is the link to it — usually one t.co
+    # URL at the end, shared by every photo in the tweet.
+    for m in _media(t):
+        if m.get("url"):
+            text = text.replace(m["url"], "")
     for u in (t.get("entities") or {}).get("urls") or []:
         short, full = u.get("url"), u.get("expanded_url")
         if short and full:
@@ -107,7 +118,7 @@ def _int(v):
 
 
 def run(path, dry_run=False, root=None, log=print):
-    counts = {"imported": 0, "already had": 0, "reply": 0, "retweet": 0, "media": 0}
+    counts = {"imported": 0, "already had": 0, "reply": 0, "retweet": 0, "media only": 0}
     for js in _parts_from(path):
         for t in parse_part(js):
             why = classify(t)
@@ -135,7 +146,7 @@ def main():
     verb = "would import" if a.dry_run else "imported"
     print(f"[tweets] {verb} {c['imported']} · already had {c['already had']} · "
           f"skipped {c['reply']} repl{'y' if c['reply'] == 1 else 'ies'}, "
-          f"{c['retweet']} retweet(s), {c['media']} with media")
+          f"{c['retweet']} retweet(s), {c['media only']} media-only")
     print(f"  → {config.tweets_dir()}")
     return 0
 

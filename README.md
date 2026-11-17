@@ -350,7 +350,8 @@ scripts/gather.sh → state/material.json ──────────┤
 
 - **The source.** `scripts/import-tweets.sh <archive.zip|dir|tweets.js>` writes one `.md`
   per original tweet — front matter (`date`, `id`, `url`, `likes`, `retweets`) and the
-  text. Replies (thread continuations included), retweets and media tweets are skipped and
+  text. Tweets with a photo or video keep their text; the media is not imported. Replies
+  (thread continuations included), retweets and picture-only tweets are skipped and
   counted; `t.co` links are expanded. Re-running adds only what is new. `tweets/` is
   gitignored: it is your writing, not eliciter's to publish.
 - **The voice.** `state/voice.md` is written by a session: *Register* (from your tweets),

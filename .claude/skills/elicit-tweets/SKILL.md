@@ -149,6 +149,9 @@ bash scripts/import-tweets.sh ~/Downloads/twitter-YYYY-MM-DD.zip --dry-run
 bash scripts/import-tweets.sh ~/Downloads/twitter-YYYY-MM-DD.zip
 ```
 
-One `.md` per original tweet in `tweets/` (gitignored). Replies (including thread
-continuations), retweets and tweets with media are skipped and counted; `t.co` links are
-expanded and HTML entities unescaped. Re-running adds only what is new.
+One `.md` per original tweet in `tweets/` (gitignored). A tweet with a photo or video keeps
+its text and drops the media (and the link to it) — so its text may refer to a picture you
+cannot see ("pictured here…"); read it as text about something shown, not as a complete
+thought. Replies (including thread continuations), retweets and picture-only tweets are
+skipped and counted; `t.co` links are expanded and HTML entities unescaped. Re-running adds
+only what is new.

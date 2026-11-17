@@ -1,6 +1,7 @@
 """The Tweets tab's moving parts, against temp folders — never the real tweets/ or state/.
 
-  * the archive importer keeps what it should and cleans what it keeps;
+  * the archive importer keeps what it should (media tweets' text, not their media) and
+    cleans what it keeps;
   * tweetstore never overwrites and never writes outside its folder;
   * a tweet run is validated the way X will judge it (280, URLs at 23);
   * a voice rebuild cannot drop a section or touch `## Yours`, and its stamp drives
@@ -43,7 +44,10 @@ ARCHIVE = [
     _tw(2, "@someone no", in_reply_to_status_id_str="99"),
     _tw(3, "and the thread goes on", in_reply_to_status_id_str="1"),
     _tw(4, "RT @other: their words"),
-    _tw(5, "look at this https://t.co/pic", entities={"urls": [], "media": [{"id": 1}]}),
+    _tw(5, "the knots in these walls https://t.co/pic",
+        entities={"urls": [], "media": [{"id": 1, "url": "https://t.co/pic"}]}),
+    _tw(7, "https://t.co/only",
+        extended_entities={"media": [{"id": 2, "url": "https://t.co/only"}]}),
     _tw(6, "read this https://t.co/abc",
         entities={"urls": [{"url": "https://t.co/abc", "expanded_url": "https://example.org/p"}]}),
 ]
@@ -66,9 +70,11 @@ class TestImport(Tmp):
 
     def test_keeps_originals_and_cleans_them(self):
         c = import_tweets.run(self.write_js(), root=self.root, log=None)
-        self.assertEqual((c["imported"], c["reply"], c["retweet"], c["media"]), (2, 2, 1, 1))
+        self.assertEqual((c["imported"], c["reply"], c["retweet"], c["media only"]),
+                         (3, 2, 1, 1))
         got = {t["id"]: t for t in tweets.load(self.root)}
-        self.assertEqual(set(got), {"1", "6"})
+        self.assertEqual(set(got), {"1", "5", "6"})
+        self.assertEqual(got["5"]["text"], "the knots in these walls")    # media link gone
         self.assertEqual(got["1"]["text"], "an original thought & a second one")
         self.assertEqual(got["6"]["text"], "read this https://example.org/p")
         self.assertEqual((got["1"]["likes"], got["1"]["retweets"]), (4, 1))
@@ -78,11 +84,11 @@ class TestImport(Tmp):
         js = self.write_js()
         import_tweets.run(js, root=self.root, log=None)
         c = import_tweets.run(js, root=self.root, log=None)
-        self.assertEqual((c["imported"], c["already had"]), (0, 2))
+        self.assertEqual((c["imported"], c["already had"]), (0, 3))
 
     def test_dry_run_writes_nothing(self):
         c = import_tweets.run(self.write_js(), root=self.root, dry_run=True, log=None)
-        self.assertEqual(c["imported"], 2)
+        self.assertEqual(c["imported"], 3)
         self.assertEqual(os.listdir(self.root), [])
 
 
