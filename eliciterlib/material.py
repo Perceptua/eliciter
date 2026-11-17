@@ -11,7 +11,7 @@ and one a hill on a five-mile run. No amount of stopword tuning fixes that. What
 was a reader.
 
 So the split moved. **Gathering is a script; judging is a session.** This module does the
-half a script is actually good at: reach into five corpora through the read-only gate,
+half a script is actually good at: reach into six corpora through the read-only gate,
 pull out the whole of what is there, and write it down. What any of it *means* — what
 recurs, what is worth writing, in what register — is decided by the `elicit-writing` skill
 in a Claude session that has read the material. Nothing here scores, ranks by theme, or
@@ -24,7 +24,7 @@ material nobody has read yet, and a cheap explicit filter beats no filter. It ju
 longer decides what you should write.
 
 **Read-only, like everything else here.** Every read goes through `corpus`, `posts`, `misc`,
-`audua` and `status`, which go through `readonly.py`. The only thing this writes is
+`tweets`, `audua` and `status`, which go through `readonly.py`. The only thing this writes is
 `state/material.json`, which is eliciter's own scratch.
 
 `state/material.json` is a **snapshot, not a record**: overwritten on every run, with the
@@ -39,7 +39,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-from . import arxiv, audua, config, corpus, misc, posts, run, status
+from . import arxiv, audua, config, corpus, misc, posts, run, status, tweets, voice
 
 NAME = "material.json"
 
@@ -95,6 +95,38 @@ def _prompt_history(limit=3):
     return out[:limit * 8]
 
 
+# Tweets are tiny, so every one goes in — until there are a lot of them. Past this many,
+# the snapshot keeps the newest and the best-liked (what you sound like now, and what
+# landed), and says it was capped. A rebuild of the voice profile wants range more than
+# completeness; ten years of tweets in full would be most of the snapshot.
+MAX_TWEETS_RECENT = 400
+MAX_TWEETS_TOP = 100
+
+
+def _tweet_history():
+    """The standing tweet run, with what became of each card — the Tweets tab's
+    `previous_prompts`. A card you turned down is an answer; one you posted is done, and
+    `posted_text` is what you actually said, which is better voice evidence than any draft.
+    """
+    r = run.tweet_run()
+    return [{"title": c.get("title", ""), "site": c.get("site", ""),
+             "status": run.status_of(c, r.statuses), "decided_at": c.get("decided_at", ""),
+             "posted_text": c.get("posted_text", ""),
+             "sources": [{"source": s.get("source"), "ref": s.get("ref")}
+                         for s in c.get("sources") or []]}
+            for c in r.prompts]
+
+
+def _tweet_rows(every):
+    rows = [{"ref": t["file"], "date": t["date"].isoformat(), "text": t["text"],
+             "likes": t["likes"], "retweets": t["retweets"]} for t in every]
+    if len(rows) <= MAX_TWEETS_RECENT + MAX_TWEETS_TOP:
+        return rows, False
+    keep = {r["ref"] for r in rows[:MAX_TWEETS_RECENT]}
+    keep |= {r["ref"] for r in sorted(rows, key=lambda r: -(r["likes"] or 0))[:MAX_TWEETS_TOP]}
+    return [r for r in rows if r["ref"] in keep], True
+
+
 def _signal_dicts(signals):
     """Signals → plain dicts, keeping the full text each source handed over.
 
@@ -116,7 +148,7 @@ def _signal_dicts(signals):
 
 
 def gather(log=print, want_papers=True, want_graph=True, want_posts=True, want_misc=True,
-           want_audua=True):
+           want_audua=True, want_tweets=True):
     """Read every source and return the material, plus a note of what failed.
 
     A source that is unreachable is recorded in `unavailable` and skipped rather than
@@ -188,6 +220,24 @@ def gather(log=print, want_papers=True, want_graph=True, want_posts=True, want_m
                      "text": m["text"]}
                     for m in misc.load()]
         attempt("misc", _misc, [])
+
+    if want_tweets:
+        def _tweets():
+            every = tweets.load()
+            rows, capped = _tweet_rows(every)
+            # The voice profile's staleness is a count, so it is judged against every tweet,
+            # not the capped list.
+            v = voice.load(n_tweets=tweets.count())
+            out["voice"] = {k: v[k] for k in
+                            ("exists", "built_at", "built_from", "tweets_now",
+                             "tweets_since", "stale", "text")}
+            if capped:
+                out["tweets_capped"] = (f"{len(rows)} of {len(every)} tweets: the newest "
+                                        f"{MAX_TWEETS_RECENT} plus the {MAX_TWEETS_TOP} "
+                                        "most-liked")
+            return rows
+        attempt("tweets", _tweets, [])
+        out["previous_tweets"] = _tweet_history()
 
     if want_audua:
         def _audua():
@@ -270,6 +320,8 @@ def summarize(data):
         "recent notes": len(notes.get("recent") or []),
         "posts": len(data.get("posts") or []),
         "misc": len(data.get("misc") or []),
+        "tweets": len(data.get("tweets") or []),
+        "voice stale": bool((data.get("voice") or {}).get("stale")),
         "sessions": len(data.get("sessions") or []),
         "recent sessions": sum(1 for s in (data.get("sessions") or [])
                                if s.get("recent")),

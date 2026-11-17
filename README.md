@@ -4,15 +4,20 @@ Reads what you've been reading, and asks you to write.
 
 It replaces the weekly Claude Desktop arxiv task with a local sweep, keeps a **reading
 queue** of at most three papers whose status you control, and turns that queue — together
-with your indexia notes, perceptua posts, misc dropped writing, and audua run recordings —
-into numbered writing prompts. **A script gathers; a Claude session judges.** Ask for
+with your indexia notes, perceptua posts, misc dropped writing, your tweets, and audua run
+recordings — into numbered writing prompts. **A script gathers; a Claude session judges.** Ask for
 prompts and everything the sources have to say is collected into one file, then read and
 turned into prompts by a session — not by a rule. Nothing runs on a schedule, so a run of
 prompts stays exactly as it is until you decide to replace it. When you want to write one,
 it opens a session in the project where the writing belongs.
 
+One tab breaks the rule on purpose. **Tweets** carries drafted tweets in your voice — the
+only place eliciter writes prose for you — built from a voice profile a session maintains
+from your tweets and the rest of your writing. See [Tweets](#6-tweets-the-one-place-it-drafts).
+
 It **cannot write to indexia, perceptua, audua, or misc**. That is enforced by code and by
-tests, not by convention. See [Read-only, structurally](#read-only-structurally).
+tests, not by convention. `tweets/` has exactly one writer, for two acts you take: importing
+your archive, and saying you posted something. See [Read-only, structurally](#read-only-structurally).
 
 ```bash
 make ui        # the local UI in the foreground at http://127.0.0.1:8473
@@ -23,6 +28,8 @@ make queue     # what is waiting to be read
 make gather    # read every source            → state/material.json  (the skill does this)
 make prompts   # render what a session wrote  → prompts/latest.md
 make write     # list prompts; then scripts/write.sh <n>
+make tweets    # render the tweet cards a session wrote → prompts/tweets-latest.md
+make import-tweets ARCHIVE=~/Downloads/twitter.zip  # your X archive → tweets/
 make test      # the read-only gate, and every route still answers
 ```
 
@@ -39,11 +46,12 @@ bash scripts/ui.sh stop
 bash scripts/ui.sh status
 ```
 
-Five tabs — **Prompts** (with source, register and target project, the material shown in
+Six tabs — **Prompts** (with source, register and target project, the material shown in
 place, one click to open any source it names, and ✓/✗ to say you wrote one or that it is
-not for you), **Queue** (unread, with the terms that
+not for you), **Tweets** (cards with 2–3 drafts each, a character count, copy, and "Posted
+this" to save what you sent), **Queue** (unread, with the terms that
 matched, one click to read/reject), **Decided** (with undo), **Sources** (everything
-eliciter can read — every note, post, misc file, recording and paper — each openable in the
+eliciter can read — every note, post, misc file, tweet, recording and paper — each openable in the
 reader),
 **Search** (ad-hoc arxiv, one click to add). The header runs the sweep, the elicit, and the
 search.
@@ -87,7 +95,7 @@ else, and `make test` scans `webui.py` to prove it.
 
 ---
 
-## The five operations
+## The six operations
 
 ### 1. Replace the weekly arxiv digest, and read the whole week
 
@@ -195,9 +203,9 @@ scripts/gather.sh  →  state/material.json  →  a Claude session  →  state/p
                                               prompts/latest.md  +  scripts/write.sh <n>
 ```
 
-`gather.sh` reaches into all five corpora through the read-only gate and writes down the
+`gather.sh` reaches into all six corpora through the read-only gate and writes down the
 *whole* of what is there — the note prose behind each flagged move, every post in full,
-every file in `misc/` in full, recent (last 30 days) session summaries entire, the abstracts
+every file in `misc/` in full, your tweets, recent (last 30 days) session summaries entire, the abstracts
 of papers you have read, your stated interests, and **the prompts from last time, so a
 session knows what's already been asked and can build on it** — repeating one is fine when
 new material genuinely connects to it. It scores nothing and asks nothing. Around 90KB; it
@@ -209,13 +217,13 @@ rules `prompts.py` held:
 - **The machine proposes the site; the human writes** — indexia's spec §8.2 boundary. Every
   ask names a site and a shape and stops. A session has now read the corpus, so it is
   *more* able to state the thesis than the old generator was, and is told at length not to.
-- **The five registers are a closed set** — `note`, `verse`, `post`, `essay`, `journal` — because
+- **The four registers are a closed set** — `note`, `verse`, `essay`, `journal` — because
   `write.sh` routes on them. `length` and `project` are *derived* from the register in
   `render.validate`, never chosen, so there is no way to ask for verse and route to indexia.
   Which register a thing wants is now a judgement rather than a property of its source: a
-  recording is not automatically a journal entry. `post` (short, pithy, presenting
-  something you have been reading or thinking about to an audience) has no publishing home
-  yet, so it routes to eliciter's own `misc/` folder as `misc/post-<date>-<slug>.md`.
+  recording is not automatically a journal entry. A fifth, `post` (short writing for an
+  audience, saved to `misc/`), was retired on 2026-11-17 when the Tweets tab took over that
+  job; a decided `post` in a standing run still renders, a new one is refused.
 - **Papers prompt once marked read, never while queued.** A prompt asks for the claim you
   took from something, which does not exist until you have read it.
 - **audua sessions are eligible by recency, not a one-shot queue.** A session recorded
@@ -230,7 +238,7 @@ Every prompt cites its `sources` — one or several — and that list is mandato
 with no provenance is the machine making something up. A prompt drawing on more than one
 corpus heads the file under *Across your sources*, which is what replaced the old
 `confluence` special case; everything else falls under its single source, in the order
-**indexia → perceptua → misc → audua → arxiv**. Your own material leads, because those prompts
+**indexia → perceptua → misc → tweets → audua → arxiv**. Your own material leads, because those prompts
 continue work only you can continue while a paper prompt is available to anyone who read the
 paper.
 
@@ -312,14 +320,53 @@ bash scripts/write.sh indexia  # a session there, no particular prompt
 bash scripts/write.sh 3 --print  # show the brief and command; launch nothing
 ```
 
-It resolves the prompt, works out whether it belongs to **indexia** (note, essay, journal),
-**perceptua** (verse) or **misc** (post), and starts a Claude Code session in that directory
+It resolves the prompt, works out whether it belongs to **indexia** (note, essay, journal)
+or **perceptua** (verse), and starts a Claude Code session in that directory
 seeded with a brief: the ask, the material, where the result goes. Then it stops — the
 drafting and the committing happen there, with that project's own tools.
 
 Note prompts render the exact `indexia/staging/<id>.md` filename and header, so committing
 is a copy plus indexia's `ingest-staging`. Ids are minted from one base instant plus the
 prompt index, so no two prompts in a run collide.
+
+### 6. Tweets: the one place it drafts
+
+Everything above keeps indexia's §8.2 boundary — the machine names a site and stops. The
+Tweets tab is a deliberate exception, fenced to that tab: short writing for an audience is
+the case where a few drafts to choose from and edit are worth more than a blank box.
+
+```
+your X archive ─ scripts/import-tweets.sh ─→ tweets/*.md  (one per tweet, gitignored)
+                                                  │
+scripts/gather.sh → state/material.json ──────────┤
+                                                  ↓
+                         a Claude session (elicit-tweets) ─→ state/voice.md   (when stale)
+                                                          └→ state/tweets.json
+                                                                  ↓
+                                          scripts/tweets.sh render · the Tweets tab
+                                                                  ↓
+                                    "Posted this" ─→ tweets/<date>-….md  (and voice goes stale)
+```
+
+- **The source.** `scripts/import-tweets.sh <archive.zip|dir|tweets.js>` writes one `.md`
+  per original tweet — front matter (`date`, `id`, `url`, `likes`, `retweets`) and the
+  text. Replies (thread continuations included), retweets and media tweets are skipped and
+  counted; `t.co` links are expanded. Re-running adds only what is new. `tweets/` is
+  gitignored: it is your writing, not eliciter's to publish.
+- **The voice.** `state/voice.md` is written by a session: *Register* (from your tweets),
+  *Vocabulary* and *Preoccupations* (from everything), *What lands* (your most-liked),
+  verbatim *Examples*, and *Yours* — a section you write by hand, which overrides the rest
+  and which a rebuild is refused if it changes (`scripts/tweets.sh voice-check`). It is
+  stamped with the tweet count it was built from, so it is reported **stale** the moment
+  that count changes. Nothing rebuilds it on a schedule; the next tweets run does, or you
+  ask.
+- **The cards.** Each names a site and its sources, then 2–3 drafts that differ in kind,
+  ≤280 characters as X counts them (URLs at 23). Validated by `tweetrun.validate`. A draft
+  may only state positions you have taken in your own writing.
+- **Posting.** "Posted this →" in the UI, or `scripts/tweets.sh posted <n> --draft <k>`
+  (`--text` for an edited version), marks the card and saves what you sent into `tweets/`
+  through `tweetstore.py`. That is how tweets arrive from now on — and why each one feeds
+  the next voice rebuild.
 
 ---
 
@@ -340,7 +387,11 @@ Three layers, in `eliciterlib/readonly.py`:
 traversal refused, nothing that writes. `posts_dir()` gates perceptua's `_posts/`;
 `audua_dir()` gates audua's per-session output the same way; `misc_dir()` gates `misc/`,
 which lives inside this repo but holds your own dropped writing, not eliciter's — gated the
-same as the sources this project doesn't own.
+same as the sources this project doesn't own. `tweets_dir()` gates `tweets/` the same way.
+
+**`tweets/` has one writer.** `tweetstore.py` creates a file per tweet — for an archive
+import, or when you mark a card posted — and never overwrites, deletes, or writes outside
+that folder. `test_only_tweetstore_writes_into_tweets` fails if anything else writes there.
 
 **The project may only use the gate.** `tests/test_readonly.py` scans this project's own
 source and fails if any module constructs an `Arcade`, calls `.command(`, or opens a source
@@ -404,6 +455,7 @@ read from `indexia/docker/.env` at run time, so rotating it there is enough.
 | `ELICITER_ARXIV_CATEGORIES` | `cs.AI, cs.LG, cs.NE, q-bio.NC, nlin.AO` | |
 | `ELICITER_ARXIV_LOOKBACK_DAYS` | `7` | |
 | `ELICITER_ARXIV_MAX_RESULTS` | `300` | see below |
+| `ELICITER_TWEETS_DIR` | `tweets/` | your tweets, one `.md` each; gitignored |
 | `ELICITER_UI_PORT` | `8473` | loopback only; 8420 is indexia's UI |
 
 ### Known limits
@@ -434,7 +486,11 @@ eliciterlib/
   audua.py     audua adapter: recent (30d) session summaries → Signals
   posts.py     perceptua adapter: posts worth answering
   misc.py      misc adapter: dropped writing + scanned pages, read in full
-  signals.py   Signal, the five registers, and what each one routes to
+  tweets.py    tweets adapter: one .md per tweet, read in full
+  tweetstore.py  the one writer into tweets/ (import, "posted")
+  voice.py     the voice profile: staleness, the rebuild check, the stamp
+  tweetrun.py  validate a session's tweet cards → prompts/tweets-latest.md; posting
+  signals.py   Signal, the registers, and what each one routes to
   material.py  every source → state/material.json, for a session to read
   render.py    validate what a session wrote → prompts/latest.md
   webui.py     the JSON API behind the UI
@@ -442,8 +498,9 @@ eliciterlib/
 scripts/
   doctor.sh  test.sh  papers.sh  ui.sh
   gather.sh  prompts.sh  write.sh  sweep.sh
+  tweets.sh  import-tweets.sh
 .claude/skills/
-  reading-queue  elicit-writing  read-only-sources  eliciter-ui
+  reading-queue  elicit-writing  elicit-tweets  read-only-sources  eliciter-ui  scan-misc
 ```
 
 Sources emit signals and know nothing about writing; `material.py` serializes them and makes

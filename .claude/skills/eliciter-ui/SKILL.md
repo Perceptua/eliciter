@@ -1,6 +1,6 @@
 ---
 name: eliciter-ui
-description: Serve and use eliciter's local web UI — the reading queue with status, the writing prompts with their sources, ad-hoc arxiv search, and the handoff to a writing session. Use when the user asks to open/start/serve the eliciter UI, wants a visual or browser view of their queue or prompts, or asks to search arxiv for a specific paper and add it to the queue.
+description: Serve and use eliciter's local web UI — the reading queue with status, the writing prompts with their sources, the drafted tweets and voice profile, ad-hoc arxiv search, and the handoff to a writing session. Use when the user asks to open/start/serve the eliciter UI, wants a visual or browser view of their queue or prompts, or asks to search arxiv for a specific paper and add it to the queue.
 ---
 
 # The local UI
@@ -63,7 +63,7 @@ the trust boundary in place of loopback, and there is still no login. Do not pas
 the user asks for it. The exact URL comes from the tailnet at runtime, so it is in the log,
 not predictable by the wrapper.
 
-## Five tabs
+## Six tabs
 
 - **Prompts** — every elicitation with its source, register, length and target project.
   The material is shown in place as prose (clipped, with "show the rest"), not hidden behind
@@ -74,11 +74,20 @@ not predictable by the wrapper.
   the brief marks nothing — starting is not finishing. The same marks are available from
   the terminal (`prompts.sh written 3` / `reject 3` / `reopen 3`), and they are what tells
   the *next* run which asks were turned down rather than merely not got to yet.
+- **Tweets** — the one tab that carries drafts. Each card names its site and sources like a
+  prompt, then shows 2–3 drafted tweets in the user's voice with a live `n/280` count and
+  **Copy**. **Posted this →** opens an editable box pre-filled with that draft; saving marks
+  the card posted and writes the text (as edited) into `tweets/` — so what was actually sent
+  becomes source material and voice evidence. **Posted something else →** takes free text;
+  **✗ Not this one** and **↺ Back on offer** work as on Prompts. The run bar shows when the
+  voice profile was built, flags it **stale** when tweets have changed since, and opens
+  `state/voice.md` in the reader. Cards are written by a session (`elicit-tweets`), never
+  by the page; the CLI twin is `scripts/tweets.sh posted|reject|reopen`.
 - **Queue** — unread papers, with score and the terms that matched. ✓ Read / ✗ Reject.
   Marking one read is also what makes it eligible for a writing prompt.
 - **Decided** — read and rejected, with "↺ Back to queue" to undo.
-- **Sources** — everything eliciter can read, in five columns: recent indexia notes,
-  perceptua posts, misc dropped writing, audua recordings (flagged when already offered),
+- **Sources** — everything eliciter can read, in six columns: recent indexia notes,
+  perceptua posts, misc dropped writing, your tweets, audua recordings (flagged when already offered),
   and the paper queue. Every row opens in the reader. This is the tab for reviewing material
   without going through a prompt.
 - **Search** — ad-hoc arxiv results, with "+ Add to queue".
@@ -105,7 +114,7 @@ Two endpoints back it, both pure reads through the gate:
 | | |
 |---|---|
 | `GET /api/sources` | the catalogue — metadata and a preview line, no bodies |
-| `GET /api/source?source=&ref=` | one item in full, with `where` |
+| `GET /api/source?source=&ref=` | one item in full, with `where` (also `source=voice&ref=profile`) |
 
 They are **deliberately not part of `/api/state`**, which the page polls every 20s. The
 catalogue reads every post and transcript off disk; folding it into the poll would do that
@@ -155,4 +164,7 @@ login. See the tradeoff spelled out in `eliciterlib/webui.py`.
 
 The UI calls `corpus.connect()` like everything else — it reads indexia and cannot write to
 it, and `scripts/test.sh` scans `webui.py` along with every other module to prove it. What
-it writes is eliciter's own state: the reading queue, and the rendered prompts.
+it writes is eliciter's own state — the reading queue, decisions on prompts and tweet cards
+— plus one thing in `tweets/`: marking a card posted saves the posted text through
+`tweetstore.py`, the single sanctioned writer there (`POST /api/tweet`, which needs
+`X-Eliciter: 1` like every other POST).

@@ -12,7 +12,7 @@ artifact a session produces — the JSON — and the markdown is a rendering of 
 here, never by hand.
 
 `validate()` is the other half of that contract. A session is a good writer and an unreliable
-typist: it will produce a register that is not one of the five, or omit `project`, or number
+typist: it will produce a register that is not one of the closed set, or omit `project`, or number
 the prompts from zero. Everything derivable is derived here rather than trusted — `length`
 and `project` come from the register via `signals.py`, and `n` is assigned by position — so
 the only things a session actually has to get right are the ones only it can: the ask, the
@@ -26,7 +26,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from .run import status_of
-from .signals import LENGTH, PROJECT, PROMPT_STATUSES, REGISTERS, SOURCES
+from .signals import LEGACY_REGISTERS, LENGTH, PROJECT, PROMPT_STATUSES, REGISTERS, SOURCES
 
 # A staging filename is an indexia spec §4 id: a compact UTC timestamp to the millisecond.
 # Rendering one into a note prompt means committing the answer is `cat > staging/<that>.md`
@@ -48,7 +48,10 @@ def _staging_commit(index):
 
 
 def _post_commit(title):
-    """A post's file in misc/: dated, and prefixed so it reads as yours-for-an-audience
+    """A legacy post's file in misc/ — kept only so a standing run with a decided `post`
+    still renders the same line it always did. The register is retired (see signals.py).
+
+    A post's file in misc/: dated, and prefixed so it reads as yours-for-an-audience
     beside the fragments and scans that share the folder. misc.py titles a file from its
     name, so the slug is the title — a post read back as material is recognisable."""
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:60].rstrip("-") or "post"
@@ -59,6 +62,7 @@ SOURCE_HEADINGS = {
     "indexia": "From your notes — indexia",
     "perceptua": "From your writing — perceptua",
     "misc": "From your other writing — misc",
+    "tweets": "From your tweets",
     "audua": "From your recordings — audua",
     "arxiv": "From your reading — arxiv",
 }
@@ -92,6 +96,22 @@ def _clean_sources(raw):
     return out
 
 
+def sources_for(item, where):
+    """A prompt's or a tweet card's `sources`, cleaned and checked. Shared by both runs so
+    "every item names real material from a known corpus" means the same thing in each."""
+    sources = _clean_sources(item.get("sources"))
+    if not sources:
+        raise InvalidPrompts(
+            f"{where}: at least one entry in `sources` — an item with no provenance "
+            "is the machine making something up")
+    unknown = [s["source"] for s in sources if s["source"] not in SOURCES]
+    if unknown:
+        raise InvalidPrompts(
+            f"{where}: unknown source(s) {', '.join(sorted(set(unknown)))}; "
+            f"expected one of {', '.join(SOURCES)}")
+    return sources
+
+
 def validate(raw):
     """Session output → the canonical prompt list. Raises `InvalidPrompts` on anything
     it cannot fix by derivation.
@@ -110,7 +130,15 @@ def validate(raw):
             raise InvalidPrompts(f"{where}: expected an object, got {type(p).__name__}")
 
         register = str(p.get("register") or "").strip().lower()
-        if register not in REGISTERS:
+        status = str(p.get("status") or "").strip().lower()
+        legacy = LEGACY_REGISTERS.get(register)
+        if legacy and status not in ("written", "rejected"):
+            # A retired register survives only on a prompt you already decided about, so
+            # the standing run re-renders. A session writing a fresh one is refused.
+            raise InvalidPrompts(
+                f"{where}: `{register}` is retired — short writing for an audience belongs "
+                "on the Tweets tab (state/tweets.json, the elicit-tweets skill)")
+        if register not in REGISTERS and not legacy:
             raise InvalidPrompts(
                 f"{where}: register {register!r} is not one of {', '.join(REGISTERS)}")
 
@@ -118,16 +146,7 @@ def validate(raw):
             if not str(p.get(field) or "").strip():
                 raise InvalidPrompts(f"{where}: {field} is required")
 
-        sources = _clean_sources(p.get("sources"))
-        if not sources:
-            raise InvalidPrompts(
-                f"{where}: at least one entry in `sources` — a prompt with no provenance "
-                "is the machine making something up")
-        unknown = [s["source"] for s in sources if s["source"] not in SOURCES]
-        if unknown:
-            raise InvalidPrompts(
-                f"{where}: unknown source(s) {', '.join(sorted(set(unknown)))}; "
-                f"expected one of {', '.join(SOURCES)}")
+        sources = sources_for(p, where)
 
         # A decision you already made about this prompt survives a re-render. `render` is
         # not only run when a session writes a new run — `prompts.sh render` on the
@@ -136,21 +155,20 @@ def validate(raw):
         #
         # It is read leniently and written only when set, so the session writing a run
         # never has to know this field exists (see `run.status_of`).
-        status = str(p.get("status") or "").strip().lower()
         decided = {} if status not in PROMPT_STATUSES or status == "open" else {
             "status": status, "decided_at": str(p.get("decided_at") or "").strip()}
 
         out.append({
             "n": i,                                  # assigned here, never trusted
             "register": register,
-            "length": LENGTH[register],              # derived, not chosen
-            "project": PROJECT[register],            # derived, not chosen
+            "length": legacy["length"] if legacy else LENGTH[register],    # derived
+            "project": legacy["project"] if legacy else PROJECT[register],  # derived
             "form": str(p.get("form") or register).strip(),
             "title": str(p["title"]).strip(),
             "ask": str(p["ask"]).strip(),
             "because": str(p.get("because") or "").strip(),
             # A session may say where a thing goes; when it does not, a note gets the
-            # staging path minted above, a post its misc/ file, and everything else nothing. Derived rather
+            # staging path minted above, a legacy post its misc/ file, and everything else nothing. Derived rather
             # than asked for, because a session cannot mint a *unique* id per prompt
             # without being told this rule, and getting it wrong loses a draft.
             "commit": (str(p.get("commit") or "").strip()
@@ -182,7 +200,7 @@ def render(prompts, stats=None):
     L += ["_Written by a Claude session from `state/material.json`; rendered by "
           "`scripts/prompts.sh render` and overwritten on each run. Every prompt names a "
           "site and a shape and stops there — what it is about is yours. eliciter reads "
-          "indexia, audua, perceptua, and misc through a read-only gate and writes to none "
+          "indexia, audua, perceptua, misc, and tweets through a read-only gate and writes to none "
           "of them; `scripts/write.sh <n>` opens a session where the writing belongs._", ""]
 
     if stats.get("gathered_at"):

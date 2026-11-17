@@ -88,6 +88,19 @@ def c_misc():
     return OK, f"{len(items)} file(s) (read-only)"
 
 
+def c_tweets():
+    from eliciterlib import tweets, voice
+    items = tweets.load()
+    if not items:
+        return MEH, (f"{config.tweets_dir()} — empty; import an archive with "
+                     "scripts/import-tweets.sh <archive.zip>")
+    v = voice.load(n_tweets=tweets.count())
+    state = ("no voice profile yet" if not v["exists"]
+             else f"voice stale ({v['tweets_since']:+d} tweets since it was built)"
+             if v["stale"] else f"voice fresh, built {v['built_at'][:10]}")
+    return OK, f"{len(items)} tweet(s), latest {items[0]['date'].date()} · {state} (read-only)"
+
+
 def c_audua():
     from eliciterlib import audua
     sessions = audua.sessions()
@@ -195,6 +208,7 @@ def main():
     checks = [("config", c_config), ("indexia graph", c_graph),
               ("read-only gate", c_gate), ("indexia moves", c_moves),
               ("perceptua posts", c_posts), ("misc folder", c_misc),
+              ("tweets", c_tweets),
               ("audua sessions", c_audua),
               ("interest profile", c_profile), ("reading queue", c_queue),
               ("material", c_material), ("sweep candidates", c_candidates)]

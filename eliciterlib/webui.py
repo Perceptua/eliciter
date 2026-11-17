@@ -37,7 +37,8 @@ now (`state/material.json` → `state/prompts.json`; `state/candidates.json` →
 "Write this →" has always had.
 
 What is left is everything that is genuinely a fact or a decision *you* make: the queue and
-its statuses, the prompts and their material, the source catalogue, and ad-hoc arxiv search
+its statuses, the prompts and their material, the tweet cards and which one you posted,
+the source catalogue, and ad-hoc arxiv search
 with a one-click add — searching for a paper by name and queuing it is your call, not a
 ranking. So the page shows, opens, and records; it does not choose.
 
@@ -63,7 +64,7 @@ import urllib.parse
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import arxiv, audua, config, corpus, misc, posts, run, status
+from . import arxiv, audua, config, corpus, misc, posts, run, status, tweetrun, tweets, voice
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE = os.path.join(HERE, "ui.html")
@@ -83,6 +84,15 @@ def state_payload():
     # Read through `run.Run` rather than json.load here, so the page and the CLI agree on
     # what a prompt with no `status` field means (open) instead of each deciding for itself.
     listed = [{**p, "status": run.status_of(p)} for p in run.Run().prompts]
+    tr = run.tweet_run()
+    cards = [{**c, "status": run.status_of(c, tr.statuses)} for c in tr.prompts]
+    # The voice line on the Tweets tab. A count of tweet files is one directory listing —
+    # cheap enough to poll — and it is the same count the profile was stamped with.
+    try:
+        n_tweets = tweets.count()
+    except (OSError, SystemExit):
+        n_tweets = None
+    v = voice.load(n_tweets=n_tweets)
     return {
         "papers": {
             "unread": q.active(),
@@ -91,6 +101,9 @@ def state_payload():
             "cap": config.i("ELICITER_ARXIV_KEEP"),
         },
         "prompts": listed,
+        "tweets": cards,
+        "voice": {k: v.get(k) for k in ("exists", "built_at", "built_from", "tweets_now",
+                                         "tweets_since", "stale")},
         "config": {
             "interests": config.interests(),
             "exclude": config.exclude(),
@@ -142,6 +155,11 @@ def sources_payload():
          "date": m["date"].isoformat() if m["date"] else "",
          "preview": _first_lines(m["text"])}
         for m in misc.load()], [])
+
+    attempt("tweets", lambda: [
+        {"ref": t["file"], "title": t["text"][:80], "date": t["date"].isoformat()[:10],
+         "likes": t["likes"], "preview": ""}
+        for t in tweets.load()], [])
 
     attempt("sessions", lambda: [
         {"ref": s["stem"], "title": f"Audua — {s['date'].isoformat()}",
@@ -199,6 +217,28 @@ def source_detail(source, ref):
                         "body": m["text"],
                         "where": os.path.join(config.misc_dir(), m["file"])}
         raise KeyError(f"no misc file {ref!r}")
+
+    if source == "tweets":
+        for t in tweets.load():
+            if t["file"] == ref:
+                bits = [t["date"].isoformat()[:10]]
+                if t["likes"] is not None:
+                    bits.append(f"{t['likes']} likes")
+                if t["url"]:
+                    bits.append(t["url"])
+                return {"source": source, "ref": t["file"], "title": t["text"][:80],
+                        "subtitle": " · ".join(bits), "body": t["text"],
+                        "where": os.path.join(config.tweets_dir(), t["file"])}
+        raise KeyError(f"no tweet {ref!r}")
+
+    if source == "voice":
+        v = voice.load()
+        if not v["exists"]:
+            raise KeyError("no voice profile yet — ask a session for tweets to build one")
+        return {"source": source, "ref": "profile", "title": "Your voice",
+                "subtitle": f"built {v['built_at'] or '(unstamped)'}"
+                            + (f" from {v['built_from']} tweets" if v["built_from"] else ""),
+                "body": v["text"], "where": voice.path()}
 
     if source == "audua":
         for sess in audua.sessions():
@@ -361,6 +401,20 @@ class Handler(BaseHTTPRequestHandler):
                     r = run.Run()
                     r.mark(body["n"], body["status"], expect_title=body.get("title"))
                     r.save()
+                return self._json(200, state_payload())
+            # The Tweets tab's decisions. `posted` also saves the text you posted into
+            # tweets/ (through tweetstore, the one writer there) — that is a record of what
+            # you did, like marking a paper read, not the UI writing anything of its own.
+            if url.path == "/api/tweet":
+                with _lock:
+                    st = body["status"]
+                    if st == "posted":
+                        tweetrun.post(int(body["n"]), draft=body.get("draft"),
+                                      text=body.get("text"), title=body.get("title"))
+                    else:
+                        r = run.tweet_run()
+                        r.mark(int(body["n"]), st, expect_title=body.get("title"))
+                        r.save()
                 return self._json(200, state_payload())
             if url.path == "/api/add":
                 with _lock:

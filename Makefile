@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-.PHONY: help ui ui-up ui-down ui-status ui-restart doctor test sweep queue gather prompts write clean
+.PHONY: help ui ui-up ui-down ui-status ui-restart doctor test sweep queue gather prompts tweets import-tweets write clean
 
 help:              ## show this help
 	@grep -hE '^[a-z-]+:.*?##' $(MAKEFILE_LIST) \
@@ -41,6 +41,13 @@ gather:            ## read every source into state/material.json (the skill does
 
 prompts:           ## validate + render the prompts a session wrote
 	@bash scripts/prompts.sh render
+
+tweets:            ## validate + render the tweet cards a session wrote
+	@bash scripts/tweets.sh render
+
+import-tweets:     ## import an X archive into tweets/ (ARCHIVE=path/to/archive.zip)
+	@test -n "$(ARCHIVE)" || { echo "usage: make import-tweets ARCHIVE=path/to/archive.zip"; exit 1; }
+	@bash scripts/import-tweets.sh "$(ARCHIVE)"
 
 write:             ## list prompts on offer (then: scripts/write.sh <n>)
 	@bash scripts/write.sh

@@ -7,9 +7,9 @@
   scripts/gather.sh --quiet
 
 This is the deterministic half of eliciting. It reaches into the indexia graph, the
-perceptua posts, the misc folder, the audua session summaries and the reading queue — all
-through the read-only gate in `eliciterlib/readonly.py` — and writes the whole of what it
-found to `state/material.json`.
+perceptua posts, the misc folder, your tweets (and the voice profile's state), the audua
+session summaries and the reading queue — all through the read-only gate in
+`eliciterlib/readonly.py` — and writes the whole of what it found to `state/material.json`.
 
 It does **not** decide what any of it means. Nothing here scores a theme, picks a register
 or writes an ask; that is the `elicit-writing` skill's job, in a session that has actually
@@ -47,6 +47,7 @@ def main():
     p.add_argument("--no-audua", action="store_true", help="skip audua session summaries")
     p.add_argument("--no-posts", action="store_true", help="skip perceptua")
     p.add_argument("--no-misc", action="store_true", help="skip the misc folder")
+    p.add_argument("--no-tweets", action="store_true", help="skip tweets and the voice profile")
     p.add_argument("--stdout", action="store_true", help="print the summary, write nothing")
     p.add_argument("--quiet", action="store_true")
     a = p.parse_args()
@@ -55,7 +56,8 @@ def main():
 
     data = material.gather(log=log, want_papers=not a.no_papers,
                            want_graph=not a.no_graph, want_posts=not a.no_posts,
-                           want_misc=not a.no_misc, want_audua=not a.no_audua)
+                           want_misc=not a.no_misc, want_audua=not a.no_audua,
+                           want_tweets=not a.no_tweets)
     counts = material.summarize(data)
 
     if a.stdout:

@@ -1,14 +1,14 @@
 ---
 name: read-only-sources
-description: How eliciter reads indexia, audua, perceptua, and misc without being able to write to any of them, and the rules for adding code that touches a source. Use when adding or changing anything that queries the indexia graph, reads audua session transcripts, reads perceptua posts, or reads the misc folder, when a ReadOnlyViolation is raised, when the read-only tests fail, or when the user asks whether eliciter can modify their notes, recordings, posts, or dropped writing.
+description: How eliciter reads indexia, audua, perceptua, misc, and tweets without being able to write to them (with tweets/ having exactly one sanctioned writer), and the rules for adding code that touches a source. Use when adding or changing anything that queries the indexia graph, reads audua session transcripts, reads perceptua posts, reads the misc or tweets folder, when a ReadOnlyViolation is raised, when the read-only tests fail, or when the user asks whether eliciter can modify their notes, recordings, posts, tweets, or dropped writing.
 ---
 
 # The read-only gate
 
-eliciter reads four corpora — three it does not own, plus `misc/`, which lives inside this
-repo but holds the user's own dropped writing rather than anything eliciter authors. It must
-not be able to change any of them, and that is enforced by code in `eliciterlib/readonly.py`
-rather than by discipline.
+eliciter reads five corpora — three it does not own, plus `misc/` and `tweets/`, which live
+inside this repo (gitignored) but hold the user's own writing rather than anything eliciter
+authors. Reads of all five go through `eliciterlib/readonly.py`, enforced by code rather
+than by discipline. `tweets/` has one narrow, sanctioned writer — see the end.
 
 ## The rule for new code
 
@@ -30,6 +30,9 @@ text = gate.read(f"{sessions[0]}/summary.md")
 gate = readonly.misc_dir(config.misc_dir())
 text = gate.read(gate.names()[0])
 mtime = gate.mtime(gate.names()[0])
+
+gate = readonly.tweets_dir(config.tweets_dir())     # or tweets.load()
+text = gate.read(gate.names()[0])
 ```
 
 `notelib` may be imported for its read helpers (`rows`, `first_row`, the `moveN_candidates`
@@ -51,7 +54,7 @@ What is forbidden is `notelib.Arcade()`, `.command(...)`, `.atomically(...)`,
 
 `ReadOnlyDir` is the same shape for files: `names()`, `dirs()`, `read()`, and `mtime()` (a
 timestamp, not content), path traversal refused, nothing that writes. `posts_dir()`,
-`audua_dir()`, and `misc_dir()` all hand out a `ReadOnlyDir` — `dirs()` is what lets a caller
+`audua_dir()`, `misc_dir()` and `tweets_dir()` all hand out a `ReadOnlyDir` — `dirs()` is what lets a caller
 enumerate audua's one-folder-per-session layout, and `read()` already accepts a relative
 path into a subdirectory (`read("<stem>/summary.md")`), since the traversal check only
 requires the resolved path stay under `root`.
@@ -86,6 +89,19 @@ through `readonly.misc_dir()`.
 
 If a user asks eliciter to save a note for them, the answer is to run
 `bash scripts/write.sh <n>` and do it in indexia — not to add a write path here.
+
+## tweets/: one writer, by design
+
+`eliciterlib/tweetstore.py` is the only code that writes into `tweets/`, and only for two
+acts the user takes: importing their X archive (`scripts/import-tweets.sh`), and marking a
+drafted tweet **posted** (Tweets tab or `scripts/tweets.sh posted`), which saves what they
+actually posted. It creates one file per tweet, never overwrites, never deletes, and refuses
+a path outside the folder. Everything that *reads* tweets still goes through
+`readonly.tweets_dir()`. `tests/test_readonly.py::test_only_tweetstore_writes_into_tweets`
+fails if any other module writes there, or if `tweetstore` mentions another source's path.
+
+If you need to write tweets from new code, call `tweetstore.save()` — do not open a file
+under the tweets dir yourself.
 
 eliciter writes nothing about audua at all — which sessions are eligible to prompt is
 computed statelessly from each session's date against a recency window (`audua.is_recent`),

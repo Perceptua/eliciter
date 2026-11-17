@@ -191,6 +191,24 @@ class TestMiscDirHandle(unittest.TestCase):
         self.assertEqual(public, {"names", "dirs", "read", "mtime", "root"})
 
 
+class TestTweetsDirHandle(unittest.TestCase):
+    def setUp(self):
+        self.gate = readonly.tweets_dir(config.tweets_dir())
+
+    def test_lists_reads_and_stats(self):
+        for name in self.gate.names():          # allowed to be empty
+            self.assertIsInstance(self.gate.read(name), str)
+
+    def test_refuses_path_traversal(self):
+        for bad in ("../../../etc/passwd", "../README.md", "/etc/passwd"):
+            with self.assertRaises(readonly.ReadOnlyViolation, msg=bad):
+                self.gate.read(bad)
+
+    def test_has_no_write_methods(self):
+        public = {n for n in dir(self.gate) if not n.startswith("_")}
+        self.assertEqual(public, {"names", "dirs", "read", "mtime", "root"})
+
+
 class TestProjectUsesOnlyTheGate(unittest.TestCase):
     """The other half: nothing in this project may reach around `readonly.py`."""
 
@@ -235,6 +253,28 @@ class TestProjectUsesOnlyTheGate(unittest.TestCase):
                     code = line.split("#", 1)[0]
                     if pattern.search(code) and any(r in code for r in roots):
                         offences.append(f"{name}:{lineno} {line.strip()}")
+        self.assertEqual(offences, [], "\n" + "\n".join(offences))
+
+    def test_only_tweetstore_writes_into_tweets(self):
+        """tweets/ has exactly one writer. Anything else that opens a file for writing
+        must not be aiming at the tweets dir, and tweetstore itself must not aim anywhere
+        but there."""
+        pattern = re.compile(r"open\s*\([^)]*[\"'][wax]|os\.open\s*\(|os\.replace\s*\(")
+        offences = []
+        for name, path in _sources():
+            with open(path, encoding="utf-8") as fh:
+                src = fh.read()
+            if name == "tweetstore.py":
+                for r in ("ELICITER_INDEXIA_ROOT", "ELICITER_PERCEPTUA_POSTS",
+                          "ELICITER_AUDUA_ROOT", "misc_dir(", "posts_dir(", "audua_root("):
+                    if r in src:
+                        offences.append(f"tweetstore.py mentions {r}")
+                continue
+            for lineno, line in enumerate(src.splitlines(), 1):
+                code = line.split("#", 1)[0]
+                if pattern.search(code) and ("tweets_dir(" in code
+                                             or "ELICITER_TWEETS_DIR" in code):
+                    offences.append(f"{name}:{lineno} {line.strip()}")
         self.assertEqual(offences, [], "\n" + "\n".join(offences))
 
     def test_the_scanner_actually_catches_a_bypass(self):

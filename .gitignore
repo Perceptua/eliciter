@@ -17,5 +17,10 @@ state/
 # eliciter's to publish; back it up separately if you care about it.
 misc/
 
+# Your tweets, one .md per tweet — imported from an X archive, or saved when you mark a
+# drafted tweet posted. Your own writing and the evidence for the voice profile; never
+# committed.
+tweets/
+
 __pycache__/
 *.py[cod]
