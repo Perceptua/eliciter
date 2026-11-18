@@ -33,7 +33,7 @@
   button:disabled { opacity:.5; cursor:progress; }
   button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
   button.primary:hover:not(:disabled) { color:#fff; filter:brightness(1.1); }
-  input[type=search] { font:inherit; padding:.35rem .6rem; border:1px solid var(--line);
+  input[type=search], #post-id { font:inherit; padding:.35rem .6rem; border:1px solid var(--line);
                        border-radius:6px; background:var(--panel); color:var(--ink); min-width:15rem; }
   nav { display:flex; gap:.3rem; border-bottom:1px solid var(--line); margin-bottom:1rem; }
   nav button { border:0; border-bottom:2px solid transparent; border-radius:0; background:none; }
@@ -171,8 +171,13 @@
     <button onclick="document.getElementById('post').close()">Cancel</button></div>
   <div style="padding:1rem">
     <p class="meta" style="margin:0 0 .5rem">Edit to match what you actually posted. Saving
-      marks the card posted and writes this text to <code>tweets/</code>.</p>
+      marks the card posted and writes this text to <code>tweets/</code>, named by the post's
+      id — the same name an archive import gives it.</p>
     <textarea class="posting" id="post-text"></textarea>
+    <label class="meta" for="post-id" style="display:block;margin:.75rem 0 .25rem">The post on
+      X — its link or id</label>
+    <input id="post-id" type="text" inputmode="url" autocomplete="off" spellcheck="false"
+      placeholder="https://x.com/you/status/1857…" style="width:100%;box-sizing:border-box;min-width:0">
     <div class="actions" style="justify-content:space-between">
       <span class="meta" id="post-count"></span>
       <button class="primary" id="post-save">Save as posted</button>
@@ -404,12 +409,17 @@ function openPost(n) {
   const count = () => { $("#post-count").innerHTML = lenLabel(tweetLen(ta.value)); };
   ta.oninput = count; count();
   $("#post-title").textContent = `${n}. ${c.title}`;
+  const idIn = $("#post-id");
+  idIn.value = "";
   $("#post-save").onclick = async () => {
     const text = ta.value.trim();
     if (!text) { toast("nothing to save"); return; }
+    // The server is the judge (tweetstore.parse_id); this only catches the empty case.
+    const id = idIn.value.trim();
+    if (!id) { toast("paste the post's link or id"); idIn.focus(); return; }
     try {
       S = await api("/api/tweet", {method:"POST", body: JSON.stringify({
-        n, status:"posted", title:c.title, text})});
+        n, status:"posted", title:c.title, text, id})});
       $("#post").close(); paint(); toast("saved to tweets/");
     } catch (e) { toast(e.message, 5000); refresh().catch(() => {}); }
   };

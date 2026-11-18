@@ -170,9 +170,13 @@ rather than spending the start of their session on it.
 
 ## Drafts, and after
 
-Drafts appear on the Tweets tab, newest first. When one goes out, **Posted this →**
-(or `bash scripts/tweets.sh posted <n>`, with `--text "…"` if it changed) saves the
-text into `tweets/`, where it becomes source material and voice evidence. **✗ Not this
+Drafts appear on the Tweets tab, newest first, and each open one sits in `tweets/drafts/`.
+When one goes out, **Posted this →** with the post's link or id (or
+`bash scripts/tweets.sh posted <n> --id <id|link>`, with `--text "…"` if it changed) saves
+the text into `tweets/<date>-<id>.md`, where it becomes source material and voice evidence.
+The id is required: it names the file the same way the archive import does, so a later
+import never duplicates it. A draft marked posted before ids were required can be given one
+with the same command. **✗ Not this
 one** marks it rejected. `bash scripts/tweets.sh show` lists drafts and recent topics.
 
 **Revising a draft** that has not gone out: `bash scripts/tweets.sh revise <n> --text "…"`
@@ -185,9 +189,13 @@ belong in the lessons.
 
 ## Importing the archive
 
+Archive downloads go in `tweets/archives/`; with no argument, the import reads the newest
+zip there.
+
 ```bash
-bash scripts/import-tweets.sh ~/Downloads/twitter-YYYY-MM-DD.zip --dry-run
-bash scripts/import-tweets.sh ~/Downloads/twitter-YYYY-MM-DD.zip
+bash scripts/import-tweets.sh --dry-run
+bash scripts/import-tweets.sh
+bash scripts/import-tweets.sh ~/Downloads/twitter-YYYY-MM-DD.zip   # or name one
 ```
 
 This writes one `.md` per original tweet into `tweets/` (gitignored):
@@ -196,5 +204,5 @@ This writes one `.md` per original tweet into `tweets/` (gitignored):
 - `t.co` links are expanded.
 - Re-running adds only what is new.
 
-Saving one by hand (`tweetstore.save`, named `YYYY-MM-DD-<id>.md` with the UTC date) is
-also fine, and the import will not duplicate it.
+Every posted tweet is named `YYYY-MM-DD-<id>.md` (UTC date), however it arrived, so the
+import never duplicates one already marked posted.

@@ -6,8 +6,8 @@
   scripts/tweets.sh topic --title "…" --source misc:"x.txt" --outcome passed --note "why"
   scripts/tweets.sh revise 3 --text "…"        # change a draft before it goes out
   scripts/tweets.sh revise 3 --title "…"       # …or its topic label
-  scripts/tweets.sh posted 3                   # it went out as drafted — saved to tweets/
-  scripts/tweets.sh posted 3 --text "…"        # …or what went out, if you changed it
+  scripts/tweets.sh posted 3 --id <id|link>   # it went out as drafted — saved to tweets/
+  scripts/tweets.sh posted 3 --id … --text "…" # …or what went out, if you changed it
   scripts/tweets.sh reject 3                   # not posting it after all
   scripts/tweets.sh reopen 3                   # undo either
   scripts/tweets.sh voice-check                # validate state/voice.next.md; write nothing
@@ -23,8 +23,11 @@ session does not pitch a topic you turned down.
 `--source` is `<source>:<ref>` (repeatable), with an optional `|title`:
 `--source "tweets:2021-09-29-1443267727976710150.md|a historian of the 28th century"`.
 
-`posted` saves the text into `tweets/` as one `.md`, so what you posted becomes source
-material — and voice evidence — on the next gather.
+Each open draft also sits in `tweets/drafts/` until it goes out. `posted` takes the post's
+X id (or its link) and saves the text into `tweets/` as `YYYY-MM-DD-<id>.md` — the same
+name an archive import gives it — so what you posted becomes source material, and voice
+evidence, on the next gather. A draft posted before ids were required can be given its id
+the same way.
 """
 import argparse
 import os
@@ -52,6 +55,7 @@ def main():
     p.add_argument("--title", help="the topic, as a short label")
     p.add_argument("--source", action="append", default=[], help="<source>:<ref>[|title]")
     p.add_argument("--text", help="the tweet (draft), its new text (revise), or what went out (posted)")
+    p.add_argument("--id", help="posted: the post's X id, or its link")
     p.add_argument("--because", default="", help="draft: why the topic was live")
     p.add_argument("--outcome", choices=tweetrun.TOPIC_OUTCOMES, help="topic: what became of it")
     p.add_argument("--note", default="", help="topic: why you passed, in a few words")
@@ -97,12 +101,13 @@ def main():
             if a.n is None:
                 raise SystemExit(f"which draft? e.g. `bash scripts/tweets.sh {a.action} 3`")
             if a.action == "posted":
-                d, path = tweetrun.post(a.n, text=a.text)
+                if not a.id:
+                    raise SystemExit("--id is required: the post's X id or its link, e.g. "
+                                     f"`bash scripts/tweets.sh posted {a.n} --id https://x.com/you/status/1857…`")
+                d, path = tweetrun.post(a.n, a.id, text=a.text)
                 print(f"✓ {a.n}. {d.get('title', '')[:58]} — posted, saved to {path}")
                 return 0
-            r = run.tweet_run()
-            marked = r.mark(a.n, DECIDE[a.action])
-            r.save()
+            marked = tweetrun.decide(a.n, DECIDE[a.action])
             st = run.status_of(marked, TWEET_STATUSES)
             print(f"{MARK[st]} {a.n}. {marked.get('title', '')[:58]} — "
                   + ("back on offer" if st == "open" else st))

@@ -159,16 +159,24 @@ class TestRoutes(unittest.TestCase):
                                r=run.tweet_run(path))
             with mock.patch.object(run, "tweets_path", lambda: path), \
                     mock.patch.dict(os.environ, {"ELICITER_TWEETS_DIR": root}):
+                link = "https://x.com/me/status/1990486787850289209"
+                tops = lambda: [n for n in os.listdir(root)
+                                if os.path.isfile(os.path.join(root, n))]
                 code, _ = self.post("/api/tweet", {"n": 1, "status": "posted",
-                                                   "title": "not A"})
+                                                   "title": "not A", "id": link})
                 self.assertEqual(code, 409)
-                self.assertEqual(os.listdir(root), [])
+                code, _ = self.post("/api/tweet", {"n": 1, "status": "posted",
+                                                   "title": "A"})
+                self.assertEqual(code, 400)                    # no id, nothing saved
+                self.assertEqual(tops(), [])
                 code, body = self.post("/api/tweet", {"n": 1, "status": "posted",
-                                                      "text": "one!", "title": "A"})
+                                                      "text": "one!", "title": "A", "id": link})
                 self.assertEqual(code, 200, body[:300])
                 card = json.loads(body)["tweets"][0]
-                self.assertEqual((card["status"], card["posted_text"]), ("posted", "one!"))
-                self.assertEqual(len(os.listdir(root)), 1)
+                self.assertEqual((card["status"], card["posted_text"], card["posted_id"]),
+                                 ("posted", "one!", "1990486787850289209"))
+                self.assertEqual(tops(), [card["posted_file"]])
+                self.assertTrue(card["posted_file"].endswith("-1990486787850289209.md"))
                 self.assertEqual(self.post("/api/tweet", {"n": 1, "status": "open",
                                                           "title": "A"})[0], 200)
                 self.assertEqual(self.post("/api/tweet", {"n": 1, "status": "written"})[0], 400)

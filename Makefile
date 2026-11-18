@@ -45,9 +45,8 @@ prompts:           ## validate + render the prompts a session wrote
 tweets:            ## your finalized tweet drafts, and recent topics
 	@bash scripts/tweets.sh show
 
-import-tweets:     ## import an X archive into tweets/ (ARCHIVE=path/to/archive.zip)
-	@test -n "$(ARCHIVE)" || { echo "usage: make import-tweets ARCHIVE=path/to/archive.zip"; exit 1; }
-	@bash scripts/import-tweets.sh "$(ARCHIVE)"
+import-tweets:     ## import an X archive into tweets/ (newest in tweets/archives/, or ARCHIVE=path)
+	@bash scripts/import-tweets.sh $(if $(ARCHIVE),"$(ARCHIVE)")
 
 write:             ## list prompts on offer (then: scripts/write.sh <n>)
 	@bash scripts/write.sh

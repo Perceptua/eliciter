@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Import your tweets from an X/Twitter archive — one `.md` per tweet in tweets/.
 
+  scripts/import-tweets.sh                                       # newest zip in tweets/archives/
   scripts/import-tweets.sh ~/Downloads/twitter-2026-11-17.zip
   scripts/import-tweets.sh ~/Downloads/twitter-archive/          # unzipped
   scripts/import-tweets.sh ~/Downloads/twitter-archive/data/tweets.js
@@ -18,7 +19,11 @@ The text is cleaned the way you would read it on the site: `&amp;` and friends a
 unescaped, every `t.co` link is replaced with the URL it points to, and the `t.co` link X
 appends for attached media is removed, since it points at a picture that is not imported.
 
-Idempotent: a tweet already in tweets/ is left alone, so re-importing a newer archive
+Keep downloads in `tweets/archives/` and the archive argument can be left off. Nothing
+there is read as a tweet: the tweets source lists only the top level of tweets/.
+
+Idempotent: a tweet already in tweets/ — imported, or marked posted on the Tweets tab,
+which names it by the same id — is left alone, so re-importing a newer archive
 adds only what is new. The archive is read in memory, so nothing is extracted to disk.
 Writing goes through `eliciterlib/tweetstore.py`, the one module allowed to write there.
 """
@@ -117,6 +122,17 @@ def _int(v):
         return None
 
 
+def newest_archive(root=None):
+    """The most recently modified .zip in tweets/archives/ — where downloads are kept."""
+    d = os.path.join(root or config.tweets_dir(), tweetstore.ARCHIVES)
+    zips = [os.path.join(d, n) for n in os.listdir(d)
+            if n.lower().endswith(".zip")] if os.path.isdir(d) else []
+    if not zips:
+        raise SystemExit(f"no archive given, and no .zip in {d} — download your X archive "
+                         "there, or pass its path")
+    return max(zips, key=os.path.getmtime)
+
+
 def run(path, dry_run=False, root=None, log=print):
     counts = {"imported": 0, "already had": 0, "reply": 0, "retweet": 0, "media only": 0}
     for js in _parts_from(path):
@@ -138,11 +154,15 @@ def run(path, dry_run=False, root=None, log=print):
 def main():
     p = argparse.ArgumentParser(prog="import-tweets", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("archive", help="the archive .zip, its unzipped folder, or a tweets.js")
+    p.add_argument("archive", nargs="?",
+                   help="the archive .zip, its unzipped folder, or a tweets.js "
+                        "(default: the newest .zip in tweets/archives/)")
     p.add_argument("--dry-run", action="store_true", help="count what would happen; write nothing")
     a = p.parse_args()
 
-    c = run(os.path.expanduser(a.archive), dry_run=a.dry_run)
+    archive = os.path.expanduser(a.archive) if a.archive else newest_archive()
+    print(f"[import] {archive}")
+    c = run(archive, dry_run=a.dry_run)
     verb = "would import" if a.dry_run else "imported"
     print(f"[tweets] {verb} {c['imported']} · already had {c['already had']} · "
           f"skipped {c['reply']} repl{'y' if c['reply'] == 1 else 'ies'}, "

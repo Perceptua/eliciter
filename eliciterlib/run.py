@@ -172,4 +172,4 @@ def tweet_run(path=None):
     """Your finalized tweet drafts — `state/tweets.json`, the Tweets tab's file. The topic
     log rides along in `meta["topics"]` (see `tweetrun.log_topic`)."""
     return Run(path or tweets_path(), statuses=TWEET_STATUSES, key="drafts",
-               decision_fields=("posted_text", "posted_file"))
+               decision_fields=("posted_text", "posted_file", "posted_id"))
