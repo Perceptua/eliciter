@@ -91,7 +91,7 @@ class TestImport(Tmp):
         js = self.write_js()
         import_tweets.run(js, root=self.root, log=None)
         c = import_tweets.run(js, root=self.root, log=None)
-        self.assertEqual((c["imported"], c["already had"]), (0, 3))
+        self.assertEqual((c["imported"], c["updated"], c["unchanged"]), (0, 0, 3))
 
     def test_dry_run_writes_nothing(self):
         c = import_tweets.run(self.write_js(), root=self.root, dry_run=True, log=None)
@@ -102,10 +102,10 @@ class TestImport(Tmp):
 class TestStore(Tmp):
     def test_never_overwrites(self):
         when = datetime(2026, 11, 17, 12, tzinfo=timezone.utc)
-        p, made = tweetstore.save("first", when, id="7", root=self.root)
-        self.assertTrue(made)
-        p2, made2 = tweetstore.save("changed", when, id="7", root=self.root)
-        self.assertEqual((p2, made2), (p, False))
+        p, outcome = tweetstore.save("first", when, id="7", root=self.root)
+        self.assertEqual(outcome, "created")
+        p2, outcome2 = tweetstore.save("changed", when, id="7", root=self.root)
+        self.assertEqual((p2, outcome2), (p, "unchanged"))
         self.assertEqual(tweets.load(self.root)[0]["text"], "first")
 
     def test_id_cannot_escape(self):
@@ -352,15 +352,24 @@ class TestPost(Tmp):
             tweetrun.post(1, ID, r=self.r())
         self.assertEqual(len(self.top()), 1)
 
-    def test_import_after_posting_adds_nothing(self):
-        tweetrun.post(1, ID, r=self.r())
+    def test_import_after_posting_replaces_it_with_the_archive(self):
+        """Same name, so no duplicate; and the archive's copy — with its likes — wins."""
+        _, path = tweetrun.post(1, ID, r=self.r())
         js = os.path.join(self.tmp.name, "tweets.js")
         t = _tw(ID, "one")["tweet"]
         t["created_at"] = ID_DATE.strftime("%a %b %d %H:%M:%S +0000 %Y")
         with open(js, "w", encoding="utf-8") as fh:
             fh.write("window.YTD.tweets.part0 = " + json.dumps([{"tweet": t}]))
+        c = import_tweets.run(js, root=self.root, dry_run=True, log=None)
+        self.assertEqual((c["imported"], c["updated"]), (0, 1))
+        self.assertIsNone(tweets.load(self.root)[0]["likes"])      # dry run wrote nothing
         c = import_tweets.run(js, root=self.root, log=None)
-        self.assertEqual((c["imported"], c["already had"]), (0, 1))
+        self.assertEqual((c["imported"], c["updated"], c["unchanged"]), (0, 1, 0))
+        [got] = tweets.load(self.root)
+        self.assertEqual((got["file"], got["likes"], got["retweets"]),
+                         (os.path.basename(path), 4, 1))
+        c = import_tweets.run(js, root=self.root, log=None)
+        self.assertEqual((c["updated"], c["unchanged"]), (0, 1))
 
     def test_drafts_folder_holds_the_open_drafts(self):
         self.assertEqual(self.drafts(), ["%s-draft-1.md" % self.r().find(1)["created_at"][:10]])

@@ -202,7 +202,8 @@ This writes one `.md` per original tweet into `tweets/` (gitignored):
 - A tweet with a photo or video keeps its text; the media and its link are dropped.
 - Replies (including thread continuations), retweets and picture-only tweets are skipped.
 - `t.co` links are expanded.
-- Re-running adds only what is new.
+- The archive wins: a tweet already in `tweets/` is refreshed from it when they differ
+  (likes, retweets, exact text). Re-running the same archive changes nothing.
 
 Every posted tweet is named `YYYY-MM-DD-<id>.md` (UTC date), however it arrived, so the
-import never duplicates one already marked posted.
+import never duplicates one already marked posted; it refreshes it.

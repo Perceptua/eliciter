@@ -24,9 +24,11 @@ same tweet arriving later in an archive land on the same name, and the import le
 alone instead of saving it twice.
 
 The write path for posted tweets is narrow on purpose. It creates one file per tweet,
-**never overwrites or deletes** — an existing file means that tweet is already here, and
-the answer is to leave it alone — and refuses any name that would land outside the tweets
-folder. `drafts/` is different: it mirrors the open drafts in `state/tweets.json`, so a
+never deletes one, and refuses any name that would land outside the tweets folder. It
+overwrites only when asked to (`replace=True`), and only the archive import asks: the
+archive is the record of what went out, with the latest likes and retweets, so it
+supersedes a file saved when the tweet was marked posted, or by an earlier import. Marking a
+draft posted never overwrites — an existing file means the tweet is already here. `drafts/` is different: it mirrors the open drafts in `state/tweets.json`, so a
 revision rewrites a draft file and posting or rejecting removes it. Only files named
 `*-draft-<n>.md` are touched there; anything else you put in `drafts/` is left alone. The
 readers (`tweets.py`) list only the top level, so drafts and archives are never mistaken
@@ -105,9 +107,10 @@ def _folder(root=None):
 
 
 def save(text, date=None, id=None, url=None, likes=None, retweets=None, root=None,
-         dry_run=False):
-    """Write one posted tweet. Returns `(path, created)`; `created` is False if it was
-    already there, in which case nothing was touched.
+         dry_run=False, replace=False):
+    """Write one posted tweet. Returns `(path, outcome)`, where outcome is "created",
+    "unchanged" (the file was already there and was left alone), or — with `replace` —
+    "updated" (the file was there with different content and has been rewritten).
 
     `id` is required: a tweet is named by it. `date` defaults to the one the id carries."""
     text = (text or "").strip()
@@ -126,25 +129,38 @@ def save(text, date=None, id=None, url=None, likes=None, retweets=None, root=Non
     path = os.path.realpath(os.path.join(folder, filename(date, id)))
     if not path.startswith(folder + os.sep):
         raise TweetStoreError(f"refusing to write outside {folder}: {path}")
+    body = render(text, date, id=id, url=url, likes=likes, retweets=retweets)
+    ts = date.timestamp()
     if os.path.exists(path):
-        return path, False
+        if not replace:
+            return path, "unchanged"
+        with open(path, encoding="utf-8") as fh:
+            if fh.read() == body:
+                return path, "unchanged"
+        if dry_run:
+            return path, "updated"
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(body)
+        os.replace(tmp, path)
+        os.utime(path, (ts, ts))
+        return path, "updated"
     if dry_run:
-        return path, True
+        return path, "created"
 
     # O_EXCL: if two saves race for the same name, the second fails rather than clobbering.
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write(render(text, date, id=id, url=url, likes=likes, retweets=retweets))
+        fh.write(body)
     try:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
     except FileExistsError:
         os.remove(tmp)
-        return path, False
+        return path, "unchanged"
     os.close(fd)
     os.replace(tmp, path)
-    ts = date.timestamp()
     os.utime(path, (ts, ts))
-    return path, True
+    return path, "created"
 
 
 # --- drafts/ ---------------------------------------------------------------------------

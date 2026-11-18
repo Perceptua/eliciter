@@ -193,7 +193,7 @@ def post(n, id, text=None, title=None, r=None):
     Shared by `scripts/tweets.sh posted` and the web UI's "Posted this", so the two cannot
     disagree about what posting means. `id` is the post's X id, or its link: the tweet is
     saved as `YYYY-MM-DD-<id>.md`, dated by the id, which is the same name an archive import
-    gives it — so importing later never saves it twice. `text` is what you actually posted,
+    gives it — so importing later never saves it twice (it refreshes this file instead). `text` is what you actually posted,
     if you changed it on the way out; otherwise the draft's own text. It is saved before the
     draft is marked, so a failed save never leaves a draft marked posted with no file
     behind it. If the file is already there (the archive got there first), it is left as
@@ -219,7 +219,7 @@ def post(n, id, text=None, title=None, r=None):
         raise ValueError(f"draft {n} is already posted ({draft.get('posted_file', '')})")
     default = draft.get("posted_text") if already else draft.get("text")
     text = _check_text(text if text and str(text).strip() else default)
-    path, _ = tweetstore.save(text, id=tid, url=f"https://x.com/i/status/{tid}")
+    path, _ = tweetstore.save(text, id=tid, url=f"https://x.com/i/status/{tid}")  # never replaces
     extra = {"posted_text": text, "posted_file": os.path.basename(path), "posted_id": tid}
     if already:
         draft.update(extra)

@@ -96,8 +96,9 @@ If a user asks eliciter to save a note for them, the answer is to run
 the user takes: importing their X archive (`scripts/import-tweets.sh`), finalizing a tweet
 in a session (mirrored to `tweets/drafts/`), and marking a drafted tweet **posted** (Tweets
 tab or `scripts/tweets.sh posted --id`), which saves what they actually posted. A posted
-tweet is one file named `<date>-<id>.md`; it is never overwritten or deleted, and a path
-outside the folder is refused. `tweets/drafts/` is the one place it rewrites and removes,
+tweet is one file named `<date>-<id>.md`; it is never deleted, a path outside the folder
+is refused, and only the archive import overwrites one (`save(replace=True)`), because the
+archive is the authoritative record of the tweet with the latest likes and retweets. `tweets/drafts/` is the one place it rewrites and removes,
 and only its own `*-draft-<n>.md` files. The readers list only the top level, so `drafts/`
 and `archives/` (X archive downloads) are never read as tweets. Everything that *reads* tweets still goes through
 `readonly.tweets_dir()`. `tests/test_readonly.py::test_only_tweetstore_writes_into_tweets`

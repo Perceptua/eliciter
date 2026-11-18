@@ -365,7 +365,9 @@ scripts/gather.sh → state/material.json ──────────┤
   newest zip in `tweets/archives/`) writes one `.md` per original tweet — front matter (`date`, `id`, `url`, `likes`, `retweets`) and the
   text. Tweets with a photo or video keep their text; the media is not imported. Replies
   (thread continuations included), retweets and picture-only tweets are skipped and
-  counted; `t.co` links are expanded. Re-running adds only what is new. `tweets/` is
+  counted; `t.co` links are expanded. The archive wins: a tweet already in `tweets/` is
+  rewritten from the archive when they differ (fresher likes and retweets); one identical
+  to it is left untouched, so re-running the same archive changes nothing. `tweets/` is
   gitignored: it is your writing, not eliciter's to publish.
 - **The voice.** `state/voice.md` is written by a session: *Register* (from your tweets),
   *Vocabulary* and *Preoccupations* (from everything), *What lands* (your most-liked),
@@ -393,7 +395,8 @@ scripts/gather.sh → state/material.json ──────────┤
   (`--text` for what actually went out, if it changed), marks the draft and saves what you
   sent into `tweets/` through `tweetstore.py`. The post's X id is required: the file is
   named `<date>-<id>.md`, dated from the id itself, which is exactly the name an archive
-  import gives the same tweet — so a later import never saves it twice. That is how tweets arrive from now on — and why each one feeds
+  import gives the same tweet — so a later import never saves it twice; it refreshes the
+  file with the archive's counts instead. That is how tweets arrive from now on — and why each one feeds
   the next voice rebuild.
 
 ---
@@ -418,8 +421,10 @@ which lives inside this repo but holds your own dropped writing, not eliciter's 
 same as the sources this project doesn't own. `tweets_dir()` gates `tweets/` the same way.
 
 **`tweets/` has one writer.** `tweetstore.py` creates a file per tweet — for an archive
-import, or when you mark a card posted — and never overwrites, deletes, or writes outside
-that folder. The one exception is `tweets/drafts/`, which mirrors the open drafts: it
+import, or when you mark a card posted — and never deletes one or writes outside that folder.
+Only the archive import overwrites, and only a tweet the archive itself carries, since the
+archive is the record of what went out. Marking a card posted never overwrites. The other
+exception is `tweets/drafts/`, which mirrors the open drafts: it
 rewrites and removes its own `*-draft-<n>.md` files there, and nothing else. `test_only_tweetstore_writes_into_tweets` fails if anything else writes there.
 
 **The project may only use the gate.** `tests/test_readonly.py` scans this project's own
