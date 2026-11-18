@@ -299,6 +299,13 @@ class TestVoice(Tmp):
         v = voice.load(n_tweets=5)
         self.assertEqual((v["stale"], v["tweets_since"]), (True, 2))
 
+    def test_duplicated_or_stray_sections_are_refused(self):
+        """A rebuild that drags the old profile along after itself must not install."""
+        for bad in (PROFILE + "\n" + PROFILE, PROFILE + "\n## Notes\nx\n"):
+            self.draft(bad)
+            with self.assertRaises(voice.InvalidVoice):
+                voice.install(4)
+
     def test_yours_cannot_change(self):
         self.draft(PROFILE)
         voice.install(3)
