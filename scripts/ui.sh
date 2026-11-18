@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Manage the local eliciter UI — start | stop | status | run. See scripts/ui.py --help.
+# Manage the local eliciter UI — start | stop | restart | status | run. See scripts/ui.py --help.
 # `start` backgrounds it (setsid, detached, logs to file) so `make ui-up` outlives the
 # shell that launched it; `run` is the old foreground behavior, Ctrl-C to stop.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -77,6 +77,22 @@ case "${1:-run}" in
       exit 1
     fi
     ;;
+  restart)
+    # With no flags, come back the way the running daemon was started — its own argv, read
+    # from /proc, not this invocation's. `make ui-restart` used to stop a --tailscale
+    # server & start a loopback one, & the UI quietly vanished from the tailnet. Flags
+    # given here replace the old ones, so `restart` with no flags never changes how the
+    # server is reached.
+    args=("${@:2}")
+    if [[ ${#args[@]} -eq 0 ]] && pid="$(daemon_pid "$NAME" "$SCRIPT")"; then
+      mapfile -d '' argv <"/proc/$pid/cmdline" 2>/dev/null || argv=()
+      for ((i = 0; i < ${#argv[@]}; i++)); do
+        if [[ "${argv[i]}" == "$SCRIPT" ]]; then args=("${argv[@]:i+1}"); break; fi
+      done
+    fi
+    daemon_stop "$NAME" "$SCRIPT" && echo "[ui] stopped" || echo "[ui] was not running"
+    exec bash "${BASH_SOURCE[0]}" start "${args[@]}"
+    ;;
   run)   # foreground (the old default); pass-through args (--port N, --open, --tailscale)
     run_py ui.py "${@:2}"
     ;;
@@ -90,5 +106,5 @@ case "${1:-run}" in
       echo "[ui] DOWN"
     fi
     ;;
-  *) echo "usage: ui.sh [start|stop|status|run] [--port N] [--open] [--tailscale]" >&2; exit 2 ;;
+  *) echo "usage: ui.sh [start|stop|restart|status|run] [--port N] [--open] [--tailscale]" >&2; exit 2 ;;
 esac

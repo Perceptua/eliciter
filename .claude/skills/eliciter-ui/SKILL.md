@@ -13,11 +13,14 @@ bash scripts/ui.sh run --port 8474
 bash scripts/ui.sh start            # detached; survives the shell — logs to ~/.eliciter/ui.log
 bash scripts/ui.sh stop
 bash scripts/ui.sh status
+bash scripts/ui.sh restart          # comes back with the flags it was started with (e.g. --tailscale)
 ```
 
 **The subcommand is not optional except for `run`.** `ui.sh --open` is a usage error, not a
 foreground start with a browser — flags go after `run`/`start`. (`make ui`, `make ui-up`,
-`make ui-down`, `make ui-status`, `make ui-restart` wrap these.)
+`make ui-down`, `make ui-status`, `make ui-restart` wrap these. Restart with no flags
+keeps the running server's own flags, so a tailnet UI stays on the tailnet; flags given to
+`restart`, or `ARGS=…` to make, replace them.)
 
 Stdlib `http.server`, one HTML file, no dependencies — consistent with the rest of the
 project. Loopback only by default.
