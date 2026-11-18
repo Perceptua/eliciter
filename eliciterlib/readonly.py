@@ -177,3 +177,9 @@ def misc_dir(path):
     """The gated handle on the misc folder. Lives inside this repo, but it holds the
     user's own dropped writing, not eliciter's — read the same as any other source."""
     return ReadOnlyDir(path)
+
+
+def tweets_dir(path):
+    """The gated handle on the tweets folder. Like misc, it lives in this repo but holds the
+    user's own writing. Reads go through here; the one writer is `tweetstore.py`."""
+    return ReadOnlyDir(path)

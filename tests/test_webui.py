@@ -81,7 +81,7 @@ class TestRoutes(unittest.TestCase):
         code, body = self.get("/api/state")
         self.assertEqual(code, 200)
         data = json.loads(body)
-        for key in ("papers", "prompts", "config"):
+        for key in ("papers", "prompts", "tweets", "voice", "config"):
             self.assertIn(key, data)
 
     def test_sources_catalogue(self):
@@ -89,17 +89,18 @@ class TestRoutes(unittest.TestCase):
         code, body = self.get("/api/sources")
         self.assertEqual(code, 200, body[:400])
         data = json.loads(body)
-        for key in ("posts", "misc", "sessions", "notes", "papers", "errors"):
+        for key in ("posts", "misc", "tweets", "sessions", "notes", "papers", "errors"):
             self.assertIn(key, data)
 
     def test_source_reader_round_trip(self):
         """Open the first thing the catalogue offers. Skips only if there is nothing."""
         data = json.loads(self.get("/api/sources")[1])
-        for kind in ("posts", "misc", "sessions", "notes", "papers"):
+        for kind in ("posts", "misc", "tweets", "sessions", "notes", "papers"):
             rows = data.get(kind) or []
             if not rows:
                 continue
-            source = {"posts": "perceptua", "misc": "misc", "sessions": "audua",
+            source = {"posts": "perceptua", "misc": "misc", "tweets": "tweets",
+                      "sessions": "audua",
                       "notes": "indexia", "papers": "arxiv"}[kind]
             ref = urllib.parse.quote(str(rows[0]["ref"]))
             code, body = self.get(f"/api/source?source={source}&ref={ref}")
@@ -144,6 +145,36 @@ class TestRoutes(unittest.TestCase):
                      if x["n"] == n)
         self.assertEqual(after.get("status") or "open",
                          prompts[0].get("status") or "open")
+
+    def test_tweet_post_round_trip(self):
+        """Posting from the page, against a temp run and a temp tweets/ — the server runs
+        in this process, so pointing both at a temp dir keeps the real ones untouched."""
+        import tempfile
+        from unittest import mock
+        from eliciterlib import run, tweetrun
+        with tempfile.TemporaryDirectory() as d:
+            path, root = os.path.join(d, "tweets.json"), os.path.join(d, "tweets")
+            os.makedirs(root)
+            tweetrun.add_draft("one", "A", [{"source": "misc", "ref": "x.md"}],
+                               r=run.tweet_run(path))
+            with mock.patch.object(run, "tweets_path", lambda: path), \
+                    mock.patch.dict(os.environ, {"ELICITER_TWEETS_DIR": root}):
+                code, _ = self.post("/api/tweet", {"n": 1, "status": "posted",
+                                                   "title": "not A"})
+                self.assertEqual(code, 409)
+                self.assertEqual(os.listdir(root), [])
+                code, body = self.post("/api/tweet", {"n": 1, "status": "posted",
+                                                      "text": "one!", "title": "A"})
+                self.assertEqual(code, 200, body[:300])
+                card = json.loads(body)["tweets"][0]
+                self.assertEqual((card["status"], card["posted_text"]), ("posted", "one!"))
+                self.assertEqual(len(os.listdir(root)), 1)
+                self.assertEqual(self.post("/api/tweet", {"n": 1, "status": "open",
+                                                          "title": "A"})[0], 200)
+                self.assertEqual(self.post("/api/tweet", {"n": 1, "status": "written"})[0], 400)
+                self.assertEqual(self.post("/api/tweet", {"n": 9, "status": "rejected"})[0], 404)
+                self.assertEqual(self.post("/api/tweet", {"n": 1, "status": "rejected"},
+                                           headers={"X-Eliciter": ""})[0], 403)
 
     # -- failures are 404s, never 500s ---------------------------------------
     def test_unknown_source_is_404(self):

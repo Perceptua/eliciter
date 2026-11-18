@@ -119,6 +119,19 @@
   .row .p { color:var(--dim); font-size:.82rem; margin-top:.1rem; }
   .where-line { color:var(--dim); font-size:.78rem; padding:0 1rem .8rem;
                font-family:ui-monospace,SFMono-Regular,Menlo,monospace; word-break:break-all; }
+  /* A drafted tweet. Same left rule as quoted material, because a draft is also not you
+     yet — it becomes yours when you post it, and the posted text gets the solid rule. */
+  .draft { border-left:2px solid var(--line); padding:.2rem 0 .2rem .8rem; margin:.55rem 0; }
+  .draft .body { white-space:pre-wrap; margin:0; max-width:60ch; }
+  .draft .foot { display:flex; gap:.5rem; align-items:center; margin-top:.3rem;
+                 font-size:.78rem; color:var(--dim); }
+  .draft .foot button { font-size:.78rem; padding:.15rem .5rem; }
+  .draft.posted { border-left-color:var(--ok); }
+  .over { color:var(--no); font-weight:600; }
+  .site { margin:.4rem 0 .2rem; font-weight:600; }
+  textarea.posting { width:100%; min-height:7rem; font:inherit; padding:.6rem;
+                     border:1px solid var(--line); border-radius:6px;
+                     background:var(--bg); color:var(--ink); }
   .reader { white-space:pre-wrap; font-size:.88rem; line-height:1.62; padding:1rem;
             max-height:60vh; overflow:auto; max-width:72ch; }
 </style>
@@ -135,6 +148,7 @@
 <main>
   <nav id="tabs">
     <button data-tab="prompts" aria-selected="true">Prompts</button>
+    <button data-tab="tweets" aria-selected="false">Tweets</button>
     <button data-tab="papers" aria-selected="false">Queue</button>
     <button data-tab="decided" aria-selected="false">Decided</button>
     <button data-tab="sources" aria-selected="false">Sources</button>
@@ -148,6 +162,22 @@
     <button onclick="document.getElementById('dlg').close()">Close</button></div>
   <div class="cmd"><span id="dlg-cmd"></span><button id="dlg-copy">Copy</button></div>
   <pre id="dlg-body"></pre>
+</dialog>
+<!-- Posting a tweet. Pre-filled with the draft you picked and editable, because what you
+     actually post is often the draft plus a tweak — and what goes into tweets/ should be
+     what went out, not what was suggested. -->
+<dialog id="post">
+  <div class="dlg-head"><strong id="post-title">Posted</strong>
+    <button onclick="document.getElementById('post').close()">Cancel</button></div>
+  <div style="padding:1rem">
+    <p class="meta" style="margin:0 0 .5rem">Edit to match what you actually posted. Saving
+      marks the card posted and writes this text to <code>tweets/</code>.</p>
+    <textarea class="posting" id="post-text"></textarea>
+    <div class="actions" style="justify-content:space-between">
+      <span class="meta" id="post-count"></span>
+      <button class="primary" id="post-save">Save as posted</button>
+    </div>
+  </div>
 </dialog>
 <!-- The reader. A second dialog rather than a mode on the first one: the brief is
      something you copy into a terminal and the material is something you read, and
@@ -167,7 +197,7 @@
 
 <script>
 const $ = s => document.querySelector(s);
-let S = { papers:{unread:[],read:[],rejected:[],cap:10}, prompts:[], config:{} };
+let S = { papers:{unread:[],read:[],rejected:[],cap:10}, prompts:[], tweets:[], voice:{}, config:{} };
 let searchResults = [], tab = "prompts", busy = false, hideDecided = false;
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c =>
@@ -306,6 +336,97 @@ function promptCard(p) {
   </article>`;
 }
 
+// --- the Tweets tab -------------------------------------------------------
+//
+// Every card here is a tweet you finalized in a session — the page never makes one, and
+// neither does a session on its own (see the elicit-tweets skill). Copy it, post it
+// wherever you post, then say so here: "Posted this" takes the text that actually went
+// out, so tweets/ (and the next voice rebuild) learns from what you sent.
+
+// X's count, roughly: a URL costs 23 whatever its length. Mirrors tweetrun.weighted_length.
+const tweetLen = t => {
+  const urls = t.match(/https?:\/\/\S+/g) || [];
+  return t.replace(/https?:\/\/\S+/g, "").length + 23 * urls.length;
+};
+const lenLabel = n => n > 280 ? `<span class="over">${n}/280</span>` : `${n}/280`;
+
+function tweetCard(c) {
+  const st = c.status || "open";
+  const badge = st === "posted" ? `<span class="chip ok">✓ posted</span>`
+              : st === "rejected" ? `<span class="chip no">✗ rejected</span>` : "";
+  const made = (c.created_at || "").slice(0, 10), when = (c.decided_at || "").slice(0, 10);
+  const shown = st === "posted" && c.posted_text ? c.posted_text : (c.text || "");
+  const body = `<div class="draft${st === "posted" ? " posted" : ""}">
+      <p class="body">${esc(shown)}</p>
+      <div class="foot"><span>${st === "posted" ? '<span class="ok">what you posted</span> · ' : ""}${
+        lenLabel(tweetLen(shown))}</span>
+        <button onclick="copyTweet(${c.n})">Copy</button>
+        ${st === "posted" && c.posted_file ? sourceLink("tweets", c.posted_file, "in tweets/") : ""}
+      </div></div>`;
+  const actions = st === "open"
+    ? `<button onclick="openPost(${c.n})">Posted this →</button>
+       <button onclick="decideTweet(${c.n},'rejected')">✗ Not this one</button>`
+    : `<button onclick="decideTweet(${c.n},'open')">↺ Back on offer</button>`;
+  return `<article class="card${st === "open" ? "" : " decided"}${st === "rejected" ? " rejected" : ""}">
+    <h3>${c.n}. ${esc(c.title)}</h3>
+    <div class="meta">${badge}${made ? `<span>drafted ${esc(made)}</span>` : ""}${
+      when ? `<span>· ${esc(st)} ${esc(when)}</span>` : ""}</div>
+    ${body}
+    ${c.because ? `<p class="abs open" style="margin-top:.2rem">${esc(c.because)}</p>` : ""}
+    ${sourceBlock(c)}
+    <div class="actions">${actions}</div>
+  </article>`;
+}
+
+function voiceLine() {
+  const v = S.voice || {};
+  if (!v.exists) return `<span>no voice profile yet — a tweet session builds it</span>`;
+  const stale = v.stale
+    ? ` · <span class="no">stale — ${v.tweets_since > 0 ? `${v.tweets_since} new tweet${v.tweets_since === 1 ? "" : "s"}`
+        : "tweets changed"} since</span>` : "";
+  return `<span>voice built ${esc((v.built_at || "").slice(0, 10))}${
+    v.built_from != null ? ` from ${v.built_from} tweets` : ""}${stale}</span>
+    ${sourceLink("voice", "profile", "read it")}`;
+}
+
+async function copyTweet(n) {
+  const c = S.tweets.find(x => x.n === n);
+  if (!c) return;
+  await navigator.clipboard.writeText(c.posted_text || c.text || "");
+  toast("copied");
+}
+
+function openPost(n) {
+  const c = S.tweets.find(x => x.n === n);
+  if (!c) return;
+  const ta = $("#post-text");
+  ta.value = c.text || "";
+  const count = () => { $("#post-count").innerHTML = lenLabel(tweetLen(ta.value)); };
+  ta.oninput = count; count();
+  $("#post-title").textContent = `${n}. ${c.title}`;
+  $("#post-save").onclick = async () => {
+    const text = ta.value.trim();
+    if (!text) { toast("nothing to save"); return; }
+    try {
+      S = await api("/api/tweet", {method:"POST", body: JSON.stringify({
+        n, status:"posted", title:c.title, text})});
+      $("#post").close(); paint(); toast("saved to tweets/");
+    } catch (e) { toast(e.message, 5000); refresh().catch(() => {}); }
+  };
+  $("#post").showModal();
+  ta.focus();
+}
+
+async function decideTweet(n, status) {
+  const c = S.tweets.find(x => x.n === n);
+  try {
+    S = await api("/api/tweet", {method:"POST",
+      body: JSON.stringify({n, status, title: c ? c.title : ""})});
+    paint();
+    toast(status === "open" ? "back on offer" : `marked ${status}`);
+  } catch (e) { toast(e.message, 5000); refresh().catch(() => {}); }
+}
+
 async function openSource(source, ref) {
   try {
     const d = await api(`/api/source?source=${encodeURIComponent(source)}&ref=${encodeURIComponent(ref)}`);
@@ -353,6 +474,8 @@ function sourcesView() {
     ${col("posts", "perceptua — posts", sourceRows(S_.posts || [], "perceptua",
         it => (it.categories || []).join(", ")))}
     ${col("misc", "misc — dropped writing", sourceRows(S_.misc || [], "misc"))}
+    ${col("tweets", "tweets — yours", sourceRows(S_.tweets || [], "tweets",
+        it => it.likes != null ? `${it.likes} likes` : ""))}
     ${col("sessions", "audua — recordings", sourceRows(S_.sessions || [], "audua",
         it => (it.threads ? "threads left open" : "") +
               (!it.recent ? (it.threads ? " · " : "") + "older than 30d" : "")))}
@@ -383,6 +506,25 @@ function paint() {
            <code>bash scripts/gather.sh</code> reads your sources (cron does this each
            morning),<br>then open a session in <code>~/eliciter</code> and ask for prompts.
            <br><br>They appear here as soon as the session renders them.</div>`;
+  } else if (tab === "tweets") {
+    const all = S.tweets || [], statusOf = c => c.status || "open";
+    const nP = all.filter(c => statusOf(c) === "posted").length;
+    const nR = all.filter(c => statusOf(c) === "rejected").length;
+    // Drafts accumulate across sessions, so the newest leads.
+    const shown = (hideDecided ? all.filter(c => statusOf(c) === "open") : all).slice().reverse();
+    const bar = `<div class="runbar">
+      ${all.length ? `<span>${all.length} draft${all.length === 1 ? "" : "s"} · ${all.length - nP - nR} to post
+        ${nP ? `· <span class="ok">${nP} posted</span>` : ""}
+        ${nR ? `· <span class="no">${nR} rejected</span>` : ""}</span> ·` : ""}
+      ${voiceLine()}
+      ${nP + nR ? `<button onclick="hideDecided=!hideDecided;paint()">${
+        hideDecided ? "show decided" : "hide decided"}</button>` : ""}</div>`;
+    v.innerHTML = bar + (all.length
+      ? shown.map(tweetCard).join("")
+      : `<div class="empty">No drafts yet.<br><br>
+           Open a session in <code>~/eliciter</code> and say you want to write tweets.
+           <br>It pitches a topic from your recent reading &amp; writing; you write the tweet
+           together,<br>and each one you call finished lands here, ready to post.</div>`);
   } else if (tab === "papers") {
     const u = S.papers.unread;
     v.innerHTML = (u.length

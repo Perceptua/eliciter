@@ -1,6 +1,6 @@
 ---
 name: elicit-writing
-description: Read the user's gathered source material and write their numbered writing prompts, then open a writing session in the right project. Use when the user asks what they should write, wants prompts or elicitations, asks to respond to a paper, a recorded run, or their own earlier work, or says they want to start writing / drafting / editing in indexia or perceptua. For managing which papers are queued use the reading-queue skill.
+description: Read the user's gathered source material and write their numbered writing prompts, then open a writing session in the right project. Use when the user asks what they should write, wants prompts or elicitations, asks to respond to a paper, a recorded run, or their own earlier work, or says they want to start writing / drafting / editing in indexia or perceptua. For managing which papers are queued use the reading-queue skill. For tweets or anything short to post, use elicit-tweets.
 ---
 
 # Eliciting writing
@@ -61,6 +61,7 @@ would mean judging Friday against a corpus that has moved.
 | `notes.flagged` | indexia moves 4–7: unnamed themes, ratified contradictions, orphans, anniversaries, structural debt. Each has `text` — the actual note prose, not a label. |
 | `notes.recent` | the last 25 notes in full. What they have been thinking about lately. |
 | `posts` | **every** perceptua post, full text. `adjacent_to_current_reading` is a term-overlap hint from `rank.py` — a hint, not a shortlist. Ignore it when you disagree. |
+| `tweets` | their tweets, full text, with `likes`. Their own finished writing, citable like a post (`source: "tweets"`, ref = filename). Prompts here never draft a tweet — that is the Tweets tab. `voice`, `previous_tweets` belong to `elicit-tweets`; ignore them. |
 | `misc` | **every** file dropped in the gitignored `misc/` folder, full text — loose `.txt`/`.md` fragments, plus markdown made from scanned handwritten pages by the `scan-misc` skill. No scoring, no shortlist: the folder stays small on purpose, so everything in it is in play. |
 | `sessions` | audua run recordings. Ones recorded in the last 30 days (`recent: true`) carry the whole `summary.md` and are eligible to prompt; older ones carry `intro` only, as context. |
 | `papers.read` | papers marked read, with abstracts. **These are the ones that prompt.** |
@@ -139,14 +140,14 @@ never write them yourself.
 | `essay` | long | indexia | something argued, holding several things together |
 | `journal` | long | indexia | dated, personal, against a day or a recording |
 | `verse` | short | perceptua | a poem — almost always a response to another poem |
-| `post` | short | misc | short and pithy, presenting something they have been reading or thinking about **to an audience** |
 
-`post` is the one register written for other people rather than for the corpus. The ask
-names what to present and to whom it is being presented — a paper they read, a page they
-wrote, a recording — and stops; what the post *says* about it is theirs, same as anywhere
-else. It has no publishing home yet, so it lands as a file in eliciter's own `misc/`
-(`misc/post-<date>-<slug>.md`, derived for you like a note's staging id), which means a
-written post comes back as `misc` material on the next gather.
+**`post` is retired** (2026-11-17). Short writing for an audience moved to the Tweets tab,
+which works differently: tweets are composed in a conversation, under their own skill
+(`elicit-tweets`). Do not
+write a `post` prompt: `check` refuses it. Old `post` prompts in a standing run, already
+decided, still render, and `misc/post-*.md` files they produced are ordinary misc material.
+
+**The rule above is unchanged here.** Nothing in `state/prompts.json` ever contains a draft.
 
 Two standing conventions, both still true:
 
@@ -186,9 +187,9 @@ it read.
 ```
 
 `sources` is **required and must be real.** Every `ref` has to be one you saw in
-`state/material.json` — a note id, a post filename, a misc filename, an audua stem, an arxiv
-id. They are what the UI opens and what `write.sh` puts in the brief, so an invented ref is
-a citation to nothing. `render.validate` checks the `source` names but it cannot check that
+`state/material.json` — a note id, a post filename, a misc filename, a tweet filename, an
+audua stem, an arxiv id. They are what the UI opens and what `write.sh` puts in the brief, so an invented ref is
+a citation to nothing. A tweet ref is its filename in `tweets/`. `render.validate` checks the `source` names but it cannot check that
 a ref exists; that one is on you.
 
 Derived for you, so leave them out: `n`, `length`, `project`, and a note's staging id.
@@ -203,7 +204,7 @@ bash scripts/write.sh 3 --print  # show the brief and the command, launch nothin
 ```
 
 `write.sh` resolves the prompt, works out whether it belongs to indexia (notes, essays,
-journal), perceptua (verse) or misc (post), and starts a Claude Code session there seeded with a brief:
+journal) or perceptua (verse), and starts a Claude Code session there seeded with a brief:
 the ask, every source with its ref, and where the result goes. That session has *not* read
 the corpus — you did — which is why naming the sources properly matters.
 

@@ -32,7 +32,7 @@ import os
 from datetime import datetime, timezone
 
 from . import config
-from .signals import PROMPT_STATUSES
+from .signals import PROMPT_STATUSES, TWEET_STATUSES
 
 NAME = "prompts.json"
 
@@ -57,10 +57,21 @@ class Run:
     The path is injectable for tests. Everything else about the file is left alone: the
     prompts are written back exactly as they were read, plus the status, so this can never
     reshape what a session wrote (that is `render.validate`'s job, on render).
+
+    The same class holds your tweet drafts (`state/tweets.json`): pass
+    `statuses=TWEET_STATUSES, key="drafts"` — see :func:`tweet_run`. The decisions,
+    the atomic save and the staleness guard are identical; only the vocabulary differs.
+    `self.prompts` is the item list either way.
     """
 
-    def __init__(self, path=None):
+    def __init__(self, path=None, statuses=PROMPT_STATUSES, key="prompts",
+                 decision_fields=()):
         self.path = path or os.path.join(config.out_dir("state"), NAME)
+        self.statuses = tuple(statuses)
+        self.key = key
+        # Fields that belong to a decision beyond status/decided_at: set with it, and
+        # cleared with it, so reopening never leaves half a decision behind.
+        self.decision_fields = ("status", "decided_at", *decision_fields)
         self.meta = {}
         self.prompts = []
         self._load()
@@ -75,14 +86,14 @@ class Run:
             raise SystemExit(f"{self.path} is unreadable ({e}) — "
                              "re-render it with `bash scripts/prompts.sh render`")
         if isinstance(data, list):                  # a bare list is a valid thing to write
-            data = {"prompts": data}
-        self.prompts = data.get("prompts") or []
-        self.meta = {k: v for k, v in data.items() if k != "prompts"}
+            data = {self.key: data}
+        self.prompts = data.get(self.key) or []
+        self.meta = {k: v for k, v in data.items() if k != self.key}
 
     def save(self):
         tmp = self.path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump({**self.meta, "prompts": self.prompts}, fh, indent=2,
+            json.dump({**self.meta, self.key: self.prompts}, fh, indent=2,
                       ensure_ascii=False)
         os.replace(tmp, self.path)      # atomic: a crash mid-write cannot truncate the run
         return self.path
@@ -95,24 +106,30 @@ class Run:
         return None
 
     def counts(self):
-        out = {s: 0 for s in PROMPT_STATUSES}
+        out = {s: 0 for s in self.statuses}
         for p in self.prompts:
-            out[status_of(p)] = out.get(status_of(p), 0) + 1
+            st = status_of(p, self.statuses)
+            out[st] = out.get(st, 0) + 1
         return out
 
     # -- deciding ------------------------------------------------------------
-    def mark(self, n, status, expect_title=None):
+    def mark(self, n, status, expect_title=None, extra=None):
         """Record what you did with prompt `n`. Returns the prompt.
 
         `expect_title` is the staleness guard described on :class:`StaleRun`: pass what you
         were looking at and a replaced run is refused rather than mis-decided.
+
+        `extra` is any further fields that belong to the decision — for a tweet draft, the
+        text actually posted and which draft it came from. Only names in
+        `decision_fields` are accepted, and every one of them is cleared before a new
+        decision is recorded, so a decision never leaves half of itself behind.
         """
         # ValueError, not SystemExit: unlike the paper queue this is reached from the UI as
         # well as the CLI, and a bad status posted by a browser is a bad request, not a
         # reason for the server to report the queue unreachable.
-        if status not in PROMPT_STATUSES:
+        if status not in self.statuses:
             raise ValueError(f"unknown status {status!r} — "
-                             f"one of {', '.join(PROMPT_STATUSES)}")
+                             f"one of {', '.join(self.statuses)}")
         p = self.find(n)
         if p is None:
             raise KeyError(f"no prompt {n} — there are {len(self.prompts)}")
@@ -120,16 +137,19 @@ class Run:
             raise StaleRun(
                 f"prompt {n} is now {p.get('title')!r} — the run was replaced while you "
                 "were looking at it; refresh and decide again")
-        if status == "open":
-            p.pop("status", None)
-            p.pop("decided_at", None)
-        else:
+        stray = set(extra or {}) - set(self.decision_fields)
+        if stray:
+            raise ValueError(f"not a decision field: {', '.join(sorted(stray))}")
+        for k in self.decision_fields:
+            p.pop(k, None)
+        if status != "open":
             p["status"] = status
             p["decided_at"] = _now()
+            p.update({k: v for k, v in (extra or {}).items() if v not in (None, "")})
         return p
 
 
-def status_of(prompt):
+def status_of(prompt, statuses=PROMPT_STATUSES):
     """A prompt's status, defaulting to open.
 
     Absent means open, so a run a session just wrote needs no status field at all and
@@ -138,4 +158,18 @@ def status_of(prompt):
     and harmless, where a crash here would take down the whole listing.
     """
     st = str((prompt or {}).get("status") or "open").strip().lower()
-    return st if st in PROMPT_STATUSES else "open"
+    return st if st in statuses else "open"
+
+
+TWEETS_NAME = "tweets.json"
+
+
+def tweets_path():
+    return os.path.join(config.out_dir("state"), TWEETS_NAME)
+
+
+def tweet_run(path=None):
+    """Your finalized tweet drafts — `state/tweets.json`, the Tweets tab's file. The topic
+    log rides along in `meta["topics"]` (see `tweetrun.log_topic`)."""
+    return Run(path or tweets_path(), statuses=TWEET_STATUSES, key="drafts",
+               decision_fields=("posted_text", "posted_file"))

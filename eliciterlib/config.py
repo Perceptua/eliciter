@@ -24,6 +24,7 @@ DEFAULTS = {
     "ELICITER_INDEXIA_ROOT": "/home/aphorikles/indexia",
     "ELICITER_PERCEPTUA_POSTS": "/home/aphorikles/perceptua/_posts",
     "ELICITER_MISC_DIR": os.path.join(ROOT, "misc"),
+    "ELICITER_TWEETS_DIR": os.path.join(ROOT, "tweets"),
     "ELICITER_AUDUA_ROOT": "/home/aphorikles/audua/processing/output",
     "ELICITER_ARXIV_CATEGORIES": "cs.AI,cs.LG,cs.NE,q-bio.NC,nlin.AO",
     "ELICITER_ARXIV_LOOKBACK_DAYS": "7",
@@ -157,6 +158,15 @@ def misc_dir():
     converted to markdown. Gitignored — this is the user's own material, not eliciter's, and
     is read through the same gate as the other sources even though it lives in this repo."""
     d = os.environ["ELICITER_MISC_DIR"]
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def tweets_dir():
+    """Where your tweets live, one `.md` per tweet. Gitignored for the same reason misc/ is:
+    it is your own writing, not eliciter's to publish. Read through the gate like every
+    other source; the one sanctioned writer is `tweetstore.py` (import, and "posted")."""
+    d = os.environ["ELICITER_TWEETS_DIR"]
     os.makedirs(d, exist_ok=True)
     return d
 

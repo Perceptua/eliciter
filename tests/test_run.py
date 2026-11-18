@@ -113,23 +113,62 @@ class TestRun(unittest.TestCase):
         r.mark(1, "written", expect_title="A claim")     # the title it really has
 
 
-class TestPostRegister(unittest.TestCase):
-    """`post` routes to misc/ and gets a file there, the way a note gets a staging id."""
+class TestPostRegisterIsRetired(unittest.TestCase):
+    """`post` moved to the Tweets tab. An old run that used it must still re-render; a new
+    one must not be able to ask for it."""
 
-    def test_post_is_derived_short_and_misc(self):
+    def test_a_fresh_post_is_refused(self):
+        with self.assertRaises(render.InvalidPrompts) as cm:
+            render.validate([
+                {"register": "post", "title": "t", "ask": "Present it.",
+                 "sources": [{"source": "misc", "ref": "x.md"}]}])
+        self.assertIn("Tweets tab", str(cm.exception))
+
+    def test_a_decided_post_survives_a_re_render(self):
         [p] = render.validate([
             {"register": "post", "title": "Thought as motion: a reading note!",
-             "ask": "Present it.",
+             "ask": "Present it.", "status": "rejected", "decided_at": "2026-10-01",
              "sources": [{"source": "misc", "ref": "thought-as-motion-in-the-soul.md"}]}])
         self.assertEqual((p["length"], p["project"]), ("short", "misc"))
+        self.assertEqual(run.status_of(p), "rejected")
         self.assertRegex(p["commit"],
                          r"^misc/post-\d{4}-\d{2}-\d{2}-thought-as-motion-a-reading-note\.md")
 
-    def test_a_given_commit_wins(self):
+    def test_tweets_is_a_citable_source(self):
         [p] = render.validate([
-            {"register": "post", "title": "t", "ask": "a", "commit": "misc/mine.md",
-             "sources": [{"source": "misc", "ref": "x.md"}]}])
-        self.assertEqual(p["commit"], "misc/mine.md")
+            {"register": "note", "title": "t", "ask": "a",
+             "sources": [{"source": "tweets", "ref": "2024-03-05-1.md"}]}])
+        self.assertEqual(p["sources"][0]["source"], "tweets")
+
+
+class TestTweetRunDecisions(unittest.TestCase):
+    """The same `Run`, holding tweet drafts: its own statuses, its own decision fields."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.path = os.path.join(self.dir.name, "tweets.json")
+        with open(self.path, "w", encoding="utf-8") as fh:
+            json.dump({"drafts": [{"n": 1, "title": "A", "text": "x"}]}, fh)
+
+    def test_posted_with_fields_then_reopened(self):
+        r = run.tweet_run(self.path)
+        with self.assertRaises(ValueError):
+            r.mark(1, "written")                  # a prompt status, not a tweet one
+        r.mark(1, "posted", extra={"posted_text": "x", "posted_file": "f.md"})
+        r.save()
+        c = run.tweet_run(self.path).find(1)
+        self.assertEqual((run.status_of(c, run.TWEET_STATUSES), c["posted_text"]),
+                         ("posted", "x"))
+        r = run.tweet_run(self.path)
+        r.mark(1, "open")
+        r.save()
+        c = run.tweet_run(self.path).find(1)
+        self.assertFalse({"status", "posted_text", "posted_file"} & set(c))
+
+    def test_unknown_decision_field_is_refused(self):
+        with self.assertRaises(ValueError):
+            run.tweet_run(self.path).mark(1, "posted", extra={"title": "rewritten"})
 
 
 if __name__ == "__main__":

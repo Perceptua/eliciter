@@ -32,8 +32,8 @@ PROJECT_DIRS = {
     "indexia": lambda: os.environ["ELICITER_INDEXIA_ROOT"],
     # posts live at <repo>/_posts, so the project root is its parent.
     "perceptua": lambda: os.path.dirname(os.path.abspath(config.posts_dir())),
-    # Posts have no publishing home yet, so they are written into eliciter's own misc/
-    # folder — the one directory eliciter may write into (see the scan-misc skill).
+    # The retired `post` register routed here. Kept so a legacy prompt's brief still
+    # resolves, and so `write.sh misc` opens a session on your dropped writing.
     "misc": lambda: config.misc_dir(),
 }
 
@@ -88,7 +88,7 @@ def seed_text(p):
     if p.get("material"):
         lines += ["", "The part that prompted it:", "", "```", p["material"].strip(), "```"]
 
-    if p.get("project") == "misc":
+    if p.get("project") == "misc":                    # a legacy `post` prompt
         lines += [
             "",
             "Help me write it here, as a short post for other people to read, and save it "

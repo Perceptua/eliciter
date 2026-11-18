@@ -8,31 +8,32 @@ There used to be a `Prompt` here too, built by a `prompts.py` that turned each s
 an ask by rule. That is gone (2026-08-30). A prompt is now written by a Claude session that
 has read the material, and lives as JSON in `state/prompts.json`; `render.py` validates it
 and renders it. So what is left of prompt-shape in this module is the small closed
-vocabulary a session has to write *in* — the five registers, and what each one implies —
+vocabulary a session has to write *in* — the registers, and what each one implies —
 because those are the things `write.sh` routes on and they cannot be free text.
 
 The registers are unchanged, and so is what they mean. What changed is who chooses.
 """
 from dataclasses import dataclass, field
 
-# The five registers, and which of the two lengths each belongs to. The short/long split is
+# The registers, and which of the two lengths each belongs to. The short/long split is
 # how the rendered file is summarized, because "have I got a short thing and a long thing to
 # write today" is the question actually being asked of it.
-#
-# `post` (added 2026-09-23) is the one register written for somebody else: short and pithy,
-# presenting something you have been reading or thinking about to an audience. It has no
-# publishing home yet, so it lands as a file in eliciter's own misc/ folder — the one place
-# eliciter may write into (see the scan-misc skill) — until one exists.
-REGISTERS = ("note", "verse", "post", "essay", "journal")
-LENGTH = {"note": "short", "verse": "short", "post": "short",
-          "essay": "long", "journal": "long"}
+REGISTERS = ("note", "verse", "essay", "journal")
+LENGTH = {"note": "short", "verse": "short", "essay": "long", "journal": "long"}
 
 # Where the writing gets done. `scripts/write.sh` reads this to open a session in the right
 # project, so it has to be the directory name, not a label. **Derived from the register,
 # never chosen** — a session picks the register and this settles the rest, so there is no
 # way to write a prompt that asks for verse and routes to indexia.
-PROJECT = {"note": "indexia", "essay": "indexia", "journal": "indexia", "verse": "perceptua",
-           "post": "misc"}
+PROJECT = {"note": "indexia", "essay": "indexia", "journal": "indexia", "verse": "perceptua"}
+
+# Registers that existed once and are kept only so a standing run that used them still
+# reads. `post` (2026-09-23 → 2026-11-17) was short writing presented to an audience,
+# landing in misc/. It was retired when the Tweets tab took over that job — with drafts,
+# which is a different contract from a prompt (see `tweetrun.py`). `render.validate`
+# accepts a legacy register only on a prompt that is already decided, so re-rendering an
+# old run works and a session cannot write a new one.
+LEGACY_REGISTERS = {"post": {"length": "short", "project": "misc"}}
 
 # The corpora a prompt may cite. `render.validate` refuses provenance outside this list: a
 # prompt naming a source that does not exist is a prompt whose material cannot be opened,
@@ -44,12 +45,13 @@ PROJECT = {"note": "indexia", "essay": "indexia", "journal": "indexia", "verse":
 # anyone who read the paper, so when you only get through the top of a run the part that
 # survives is the part nobody else could write. misc sits after perceptua because it is also
 # finished writing — a dropped fragment or a transcribed page — asking for a reply, same as a
-# published poem; audua sits after misc because a recording is still raw.
+# published poem; tweets are finished writing too, only shorter; audua sits after them
+# because a recording is still raw.
 #
 # A prompt citing *several* sources is not in this list at all — it heads the file under
 # "across", because crossing two corpora is the one thing reading one of them could not
 # have produced.
-SOURCES = ("indexia", "perceptua", "misc", "audua", "arxiv")
+SOURCES = ("indexia", "perceptua", "misc", "tweets", "audua", "arxiv")
 
 # What you can have decided about a prompt. **open** is the absence of a decision, so it is
 # never written to the file — see `run.status_of`. The other two are the two things that
@@ -59,6 +61,11 @@ SOURCES = ("indexia", "perceptua", "misc", "audua", "arxiv")
 # starting, and a run of prompts is a list of things to write, not a list of sessions
 # opened — so the only thing that marks a prompt written is you saying you wrote it.
 PROMPT_STATUSES = ("open", "written", "rejected")
+
+# The same three decisions for a card on the Tweets tab, with `posted` in place of
+# `written`: what happens to a drafted tweet is that it goes out, and marking it posted is
+# also what saves the text you actually posted into tweets/ (see `tweetstore.py`).
+TWEET_STATUSES = ("open", "posted", "rejected")
 
 
 def source_rank(source):
@@ -79,7 +86,7 @@ class Signal:
     thinks a piece of structural debt is — passed along as one input among many rather than
     as a ranking anything is obliged to honour.
 
-    source      — 'indexia' | 'perceptua' | 'misc' | 'audua' | 'arxiv'
+    source      — 'indexia' | 'perceptua' | 'misc' | 'tweets' | 'audua' | 'arxiv'
     kind        — source-specific discriminator ('move3', 'orphan', 'post-response', …)
     title       — short human label
     detail      — the excerpt the source considers salient

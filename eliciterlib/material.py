@@ -11,7 +11,7 @@ and one a hill on a five-mile run. No amount of stopword tuning fixes that. What
 was a reader.
 
 So the split moved. **Gathering is a script; judging is a session.** This module does the
-half a script is actually good at: reach into five corpora through the read-only gate,
+half a script is actually good at: reach into six corpora through the read-only gate,
 pull out the whole of what is there, and write it down. What any of it *means* — what
 recurs, what is worth writing, in what register — is decided by the `elicit-writing` skill
 in a Claude session that has read the material. Nothing here scores, ranks by theme, or
@@ -24,7 +24,7 @@ material nobody has read yet, and a cheap explicit filter beats no filter. It ju
 longer decides what you should write.
 
 **Read-only, like everything else here.** Every read goes through `corpus`, `posts`, `misc`,
-`audua` and `status`, which go through `readonly.py`. The only thing this writes is
+`tweets`, `audua` and `status`, which go through `readonly.py`. The only thing this writes is
 `state/material.json`, which is eliciter's own scratch.
 
 `state/material.json` is a **snapshot, not a record**: overwritten on every run, with the
@@ -39,7 +39,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-from . import arxiv, audua, config, corpus, misc, posts, run, status
+from . import arxiv, audua, config, corpus, misc, posts, run, status, tweets, voice
 
 NAME = "material.json"
 
@@ -95,6 +95,112 @@ def _prompt_history(limit=3):
     return out[:limit * 8]
 
 
+# Tweets are tiny, so every one goes in — until there are a lot of them. Past this many,
+# the snapshot keeps the newest and the best-liked (what you sound like now, and what
+# landed), and says it was capped. A rebuild of the voice profile wants range more than
+# completeness; ten years of tweets in full would be most of the snapshot.
+MAX_TWEETS_RECENT = 400
+MAX_TWEETS_TOP = 100
+
+
+def _tweet_history():
+    """What earlier tweet sessions did — the `elicit-tweets` skill's memory of itself.
+
+    `drafts` are tweets you finalized, with what became of them: `posted` (and the text
+    that actually went out — the best voice evidence there is), `rejected`, or still
+    `open`. `topics` is every topic a session pitched and its outcome; a `passed` topic is
+    an answer, and is not pitched again unless something new has landed on it.
+    """
+    r = run.tweet_run()
+    return {
+        "drafts": [{"n": d.get("n"), "title": d.get("title", ""),
+                    "text": d.get("text", ""),
+                    "status": run.status_of(d, r.statuses),
+                    "posted_text": d.get("posted_text", ""),
+                    "created_at": d.get("created_at", ""),
+                    "revisions": [v.get("text", "") for v in d.get("revisions") or []],
+                    "sources": [{"source": s.get("source"), "ref": s.get("ref")}
+                                for s in d.get("sources") or []]}
+                   for d in r.prompts],
+        "topics": r.meta.get("topics") or [],
+    }
+
+
+def _dormant_topics(data):
+    """Topics you passed on, each with everything you have read or written since.
+
+    A passed topic stays dormant until new material lands on it. *Whether* a newer note
+    or paper bears on a topic is a judgement, so it is the session's to make; what a
+    script can do is the date arithmetic, so the session never has to work out which of
+    five corpora moved after the pass. `newer` is that list: candidates, not verdicts. An
+    empty `newer` means nothing at all has happened since, and the topic stays down.
+
+    Only the latest outcome per topic counts. A topic re-pitched and passed again is
+    dormant from the later date; one that was drafted since is not dormant at all.
+    `skipped` is not here: a topic the session ran out of time for was never turned down.
+    """
+    latest = {}
+    for t in (data.get("previous_tweets") or {}).get("topics") or []:
+        latest[t.get("title", "").strip().lower()] = t
+    passed = [t for t in latest.values() if t.get("outcome") == "passed"]
+    if not passed:
+        return []
+
+    notes = data.get("notes") or {}
+    papers = data.get("papers") or {}
+    since = []                                  # (date, entry) for everything dated
+    for n in notes.get("recent") or []:
+        since.append((n.get("created_at") or "",
+                      {"source": "indexia", "ref": n.get("id"), "title": n.get("title"),
+                       "kind": "note"}))
+    for key, src in (("posts", "perceptua"), ("misc", "misc")):
+        for m in data.get(key) or []:
+            since.append((m.get("date") or "", {"source": src, "ref": m.get("ref"),
+                                                "title": m.get("title"), "kind": "writing"}))
+    for t in data.get("tweets") or []:
+        since.append((t.get("date") or "", {"source": "tweets", "ref": t.get("ref"),
+                                            "title": (t.get("text") or "")[:80],
+                                            "kind": "tweet"}))
+    for p in papers.get("read") or []:
+        since.append((p.get("read_on") or "", {"source": "arxiv", "ref": p.get("ref"),
+                                               "title": p.get("title"), "kind": "reading"}))
+
+    def norm(d):          # "2026-10-22 21:32:21.188", "2026-10-22T…", "2026-10-22" → sortable
+        return str(d).replace(" ", "T")[:19]
+
+    out = []
+    for t in passed:
+        at = norm(t.get("at") or "")
+        newer = [dict(e, date=norm(d)[:10]) for d, e in since if d and norm(d) > at]
+        out.append({"title": t.get("title"), "passed_at": (t.get("at") or "")[:10],
+                    "note": t.get("note", ""), "sources": t.get("sources") or [],
+                    "newer": sorted(newer, key=lambda e: e["date"], reverse=True)})
+    return out
+
+
+LESSONS = "tweet-lessons.md"
+
+
+def _tweet_lessons():
+    """`state/tweet-lessons.md` — what earlier tweet sessions learned about running one,
+    appended at each session's wrap-up. Plain text, read whole."""
+    p = os.path.join(config.out_dir("state"), LESSONS)
+    if not os.path.isfile(p):
+        return ""
+    with open(p, encoding="utf-8") as fh:
+        return fh.read()
+
+
+def _tweet_rows(every):
+    rows = [{"ref": t["file"], "date": t["date"].isoformat(), "text": t["text"],
+             "likes": t["likes"], "retweets": t["retweets"]} for t in every]
+    if len(rows) <= MAX_TWEETS_RECENT + MAX_TWEETS_TOP:
+        return rows, False
+    keep = {r["ref"] for r in rows[:MAX_TWEETS_RECENT]}
+    keep |= {r["ref"] for r in sorted(rows, key=lambda r: -(r["likes"] or 0))[:MAX_TWEETS_TOP]}
+    return [r for r in rows if r["ref"] in keep], True
+
+
 def _signal_dicts(signals):
     """Signals → plain dicts, keeping the full text each source handed over.
 
@@ -116,7 +222,7 @@ def _signal_dicts(signals):
 
 
 def gather(log=print, want_papers=True, want_graph=True, want_posts=True, want_misc=True,
-           want_audua=True):
+           want_audua=True, want_tweets=True):
     """Read every source and return the material, plus a note of what failed.
 
     A source that is unreachable is recorded in `unavailable` and skipped rather than
@@ -189,6 +295,25 @@ def gather(log=print, want_papers=True, want_graph=True, want_posts=True, want_m
                     for m in misc.load()]
         attempt("misc", _misc, [])
 
+    if want_tweets:
+        def _tweets():
+            every = tweets.load()
+            rows, capped = _tweet_rows(every)
+            # The voice profile's staleness is a count, so it is judged against every tweet,
+            # not the capped list.
+            v = voice.load(n_tweets=tweets.count())
+            out["voice"] = {k: v[k] for k in
+                            ("exists", "built_at", "built_from", "tweets_now",
+                             "tweets_since", "stale", "text")}
+            if capped:
+                out["tweets_capped"] = (f"{len(rows)} of {len(every)} tweets: the newest "
+                                        f"{MAX_TWEETS_RECENT} plus the {MAX_TWEETS_TOP} "
+                                        "most-liked")
+            return rows
+        attempt("tweets", _tweets, [])
+        out["previous_tweets"] = _tweet_history()
+        out["tweet_lessons"] = _tweet_lessons()
+
     if want_audua:
         def _audua():
             every = audua.sessions()
@@ -234,6 +359,9 @@ def gather(log=print, want_papers=True, want_graph=True, want_posts=True, want_m
             }
         attempt("papers", _papers, {"read": [], "waiting": []})
 
+    if want_tweets and isinstance(out.get("previous_tweets"), dict):
+        out["previous_tweets"]["dormant"] = _dormant_topics(out)
+
     return out
 
 
@@ -270,6 +398,8 @@ def summarize(data):
         "recent notes": len(notes.get("recent") or []),
         "posts": len(data.get("posts") or []),
         "misc": len(data.get("misc") or []),
+        "tweets": len(data.get("tweets") or []),
+        "voice stale": bool((data.get("voice") or {}).get("stale")),
         "sessions": len(data.get("sessions") or []),
         "recent sessions": sum(1 for s in (data.get("sessions") or [])
                                if s.get("recent")),
