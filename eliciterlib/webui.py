@@ -410,12 +410,10 @@ class Handler(BaseHTTPRequestHandler):
                 with _lock:
                     st = body["status"]
                     if st == "posted":
-                        tweetrun.post(int(body["n"]), text=body.get("text"),
+                        tweetrun.post(int(body["n"]), body.get("id"), text=body.get("text"),
                                       title=body.get("title"))
                     else:
-                        r = run.tweet_run()
-                        r.mark(int(body["n"]), st, expect_title=body.get("title"))
-                        r.save()
+                        tweetrun.decide(int(body["n"]), st, title=body.get("title"))
                 return self._json(200, state_payload())
             if url.path == "/api/add":
                 with _lock:

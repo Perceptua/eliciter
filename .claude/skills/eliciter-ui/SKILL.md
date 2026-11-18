@@ -13,11 +13,14 @@ bash scripts/ui.sh run --port 8474
 bash scripts/ui.sh start            # detached; survives the shell — logs to ~/.eliciter/ui.log
 bash scripts/ui.sh stop
 bash scripts/ui.sh status
+bash scripts/ui.sh restart          # comes back with the flags it was started with (e.g. --tailscale)
 ```
 
 **The subcommand is not optional except for `run`.** `ui.sh --open` is a usage error, not a
 foreground start with a browser — flags go after `run`/`start`. (`make ui`, `make ui-up`,
-`make ui-down`, `make ui-status`, `make ui-restart` wrap these.)
+`make ui-down`, `make ui-status`, `make ui-restart` wrap these. Restart with no flags
+keeps the running server's own flags, so a tailnet UI stays on the tailnet; flags given to
+`restart`, or `ARGS=…` to make, replace them.)
 
 Stdlib `http.server`, one HTML file, no dependencies — consistent with the rest of the
 project. Loopback only by default.
@@ -78,8 +81,10 @@ not predictable by the wrapper.
   `elicit-tweets` skill), newest first. Nothing on this tab is machine-written: a draft
   exists only because the user said "done" in a chat. Each shows the text, a live `n/280`
   count, **Copy**, its topic and its sources. **Posted this →** opens an editable box
-  pre-filled with the text; saving marks it posted and writes what was actually sent into
-  `tweets/`, where it becomes source material and voice evidence. **✗ Not this one** and
+  pre-filled with the text, and a field for the post's link or X id (required); saving
+  marks it posted and writes what was actually sent into `tweets/<date>-<id>.md` — the same
+  name an archive import would give it — where it becomes source material and voice
+  evidence. Open drafts also sit in `tweets/drafts/` until they go out. **✗ Not this one** and
   **↺ Back on offer** work as on Prompts. The run bar shows when the voice profile was
   built, flags it **stale** when tweets have changed since, and opens `state/voice.md`.
   The CLI twin is `scripts/tweets.sh show|revise|posted|reject|reopen`.
@@ -165,6 +170,7 @@ login. See the tradeoff spelled out in `eliciterlib/webui.py`.
 The UI calls `corpus.connect()` like everything else — it reads indexia and cannot write to
 it, and `scripts/test.sh` scans `webui.py` along with every other module to prove it. What
 it writes is eliciter's own state — the reading queue, decisions on prompts and tweet drafts
-— plus one thing in `tweets/`: marking a card posted saves the posted text through
-`tweetstore.py`, the single sanctioned writer there (`POST /api/tweet`, which needs
+— plus `tweets/`: marking a card posted saves the posted text, and posting or rejecting a
+draft keeps `tweets/drafts/` in step, all through `tweetstore.py`, the single sanctioned
+writer there (`POST /api/tweet`, which needs
 `X-Eliciter: 1` like every other POST).

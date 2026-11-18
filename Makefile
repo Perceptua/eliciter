@@ -22,7 +22,8 @@ ui-down:           ## stop the background UI started with ui-up
 ui-status:         ## check whether the background UI is running
 	@bash scripts/ui.sh status
 
-ui-restart: ui-down ui-up ## restart the background UI
+ui-restart:        ## restart the background UI the way it was started (or with ARGS=…)
+	@bash scripts/ui.sh restart $(ARGS)
 
 doctor:            ## check every source is readable, and read-only
 	@bash scripts/doctor.sh
@@ -45,9 +46,8 @@ prompts:           ## validate + render the prompts a session wrote
 tweets:            ## your finalized tweet drafts, and recent topics
 	@bash scripts/tweets.sh show
 
-import-tweets:     ## import an X archive into tweets/ (ARCHIVE=path/to/archive.zip)
-	@test -n "$(ARCHIVE)" || { echo "usage: make import-tweets ARCHIVE=path/to/archive.zip"; exit 1; }
-	@bash scripts/import-tweets.sh "$(ARCHIVE)"
+import-tweets:     ## import an X archive into tweets/ (newest in tweets/archives/, or ARCHIVE=path)
+	@bash scripts/import-tweets.sh $(if $(ARCHIVE),"$(ARCHIVE)")
 
 write:             ## list prompts on offer (then: scripts/write.sh <n>)
 	@bash scripts/write.sh

@@ -29,7 +29,7 @@ make gather    # read every source            → state/material.json  (the skil
 make prompts   # render what a session wrote  → prompts/latest.md
 make write     # list prompts; then scripts/write.sh <n>
 make tweets    # your finalized tweet drafts, and the topics pitched lately
-make import-tweets ARCHIVE=~/Downloads/twitter.zip  # your X archive → tweets/
+make import-tweets  # newest X archive in tweets/archives/ → tweets/  (or ARCHIVE=path)
 make test      # the read-only gate, and every route still answers
 ```
 
@@ -344,24 +344,30 @@ chat (the `elicit-tweets` skill):
 6. At the end, the session writes down what it learned for next time.
 
 ```
-your X archive ─ scripts/import-tweets.sh ─→ tweets/*.md  (one per tweet, gitignored)
+tweets/archives/*.zip ─ scripts/import-tweets.sh ─→ tweets/<date>-<id>.md  (gitignored)
                                                   │
 scripts/gather.sh → state/material.json ──────────┤
                                                   ↓
                a conversation (elicit-tweets) ─→ topic pitched ─→ you pass / you write
                                                                      ↓ "done"
                                           scripts/tweets.sh draft ─→ state/tweets.json
+                                                     + tweets/drafts/<date>-draft-<n>.md
                                                                      ↓
                                                               the Tweets tab
                                                                   ↓
-                                    "Posted this" ─→ tweets/<date>-….md  (and voice goes stale)
+                          "Posted this" + the post's id ─→ tweets/<date>-<id>.md  (voice goes stale)
 ```
 
-- **The source.** `scripts/import-tweets.sh <archive.zip|dir|tweets.js>` writes one `.md`
-  per original tweet — front matter (`date`, `id`, `url`, `likes`, `retweets`) and the
+- **The folder.** `tweets/<date>-<id>.md` is a tweet that went out; `tweets/drafts/` holds
+  the open drafts; `tweets/archives/` is where X archive downloads go. Only the top level
+  is read as tweets.
+- **The source.** `scripts/import-tweets.sh [archive.zip|dir|tweets.js]` (default: the
+  newest zip in `tweets/archives/`) writes one `.md` per original tweet — front matter (`date`, `id`, `url`, `likes`, `retweets`) and the
   text. Tweets with a photo or video keep their text; the media is not imported. Replies
   (thread continuations included), retweets and picture-only tweets are skipped and
-  counted; `t.co` links are expanded. Re-running adds only what is new. `tweets/` is
+  counted; `t.co` links are expanded. The archive wins: a tweet already in `tweets/` is
+  rewritten from the archive when they differ (fresher likes and retweets); one identical
+  to it is left untouched, so re-running the same archive changes nothing. `tweets/` is
   gitignored: it is your writing, not eliciter's to publish.
 - **The voice.** `state/voice.md` is written by a session: *Register* (from your tweets),
   *Vocabulary* and *Preoccupations* (from everything), *What lands* (your most-liked),
@@ -371,7 +377,8 @@ scripts/gather.sh → state/material.json ──────────┤
   that count changes. Nothing rebuilds it on a schedule; a tweet session offers to, or you
   ask.
 - **Drafts and topics.** `state/tweets.json` holds the tweets you finalized (each checked
-  at ≤280 characters as X counts them, URLs at 23, with its sources). It also holds the
+  at ≤280 characters as X counts them, URLs at 23, with its sources); each open one is
+  mirrored to `tweets/drafts/`, and leaves it when posted or rejected. It also holds the
   **topic log**: every topic pitched, and whether it was drafted, passed or skipped. A topic
   you passed on stays **dormant**: it comes back only if you have read or written something
   since that bears on it. The gather lists what is newer than each pass, and the session
@@ -384,9 +391,12 @@ scripts/gather.sh → state/material.json ──────────┤
   draft that has not gone out yet. It keeps its number and sources, and each earlier text
   is kept under `revisions`, so the next session can see what changed after "done". A
   posted draft cannot be revised.
-- **Posting.** "Posted this →" in the UI, or `scripts/tweets.sh posted <n>` (`--text` for
-  what actually went out, if it changed), marks the draft and saves what you sent into `tweets/`
-  through `tweetstore.py`. That is how tweets arrive from now on — and why each one feeds
+- **Posting.** "Posted this →" in the UI, or `scripts/tweets.sh posted <n> --id <id|link>`
+  (`--text` for what actually went out, if it changed), marks the draft and saves what you
+  sent into `tweets/` through `tweetstore.py`. The post's X id is required: the file is
+  named `<date>-<id>.md`, dated from the id itself, which is exactly the name an archive
+  import gives the same tweet — so a later import never saves it twice; it refreshes the
+  file with the archive's counts instead. That is how tweets arrive from now on — and why each one feeds
   the next voice rebuild.
 
 ---
@@ -411,8 +421,11 @@ which lives inside this repo but holds your own dropped writing, not eliciter's 
 same as the sources this project doesn't own. `tweets_dir()` gates `tweets/` the same way.
 
 **`tweets/` has one writer.** `tweetstore.py` creates a file per tweet — for an archive
-import, or when you mark a card posted — and never overwrites, deletes, or writes outside
-that folder. `test_only_tweetstore_writes_into_tweets` fails if anything else writes there.
+import, or when you mark a card posted — and never deletes one or writes outside that folder.
+Only the archive import overwrites, and only a tweet the archive itself carries, since the
+archive is the record of what went out. Marking a card posted never overwrites. The other
+exception is `tweets/drafts/`, which mirrors the open drafts: it
+rewrites and removes its own `*-draft-<n>.md` files there, and nothing else. `test_only_tweetstore_writes_into_tweets` fails if anything else writes there.
 
 **The project may only use the gate.** `tests/test_readonly.py` scans this project's own
 source and fails if any module constructs an `Arcade`, calls `.command(`, or opens a source
@@ -508,7 +521,7 @@ eliciterlib/
   posts.py     perceptua adapter: posts worth answering
   misc.py      misc adapter: dropped writing + scanned pages, read in full
   tweets.py    tweets adapter: one .md per tweet, read in full
-  tweetstore.py  the one writer into tweets/ (import, "posted")
+  tweetstore.py  the one writer into tweets/ (import, "posted", drafts/)
   voice.py     the voice profile: staleness, the rebuild check, the stamp
   tweetrun.py  save a finalized tweet as a draft; log a pitched topic; posting
   signals.py   Signal, the registers, and what each one routes to

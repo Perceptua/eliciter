@@ -106,6 +106,15 @@ def check(new_text, old_text=None):
     if not (new_text or "").strip():
         raise InvalidVoice("the profile is empty")
     got = sections(new_text)
+    heads = [l[3:].strip() for l in _STAMP.sub("", new_text).splitlines() if l.startswith("## ")]
+    dupes = sorted({h for h in heads if heads.count(h) > 1})
+    if dupes:
+        raise InvalidVoice(f"section(s) appear twice: {', '.join('## ' + h for h in dupes)} "
+                           "— the rebuild probably carried a copy of the old profile along")
+    stray = [h for h in heads if h not in SECTIONS]
+    if stray:
+        raise InvalidVoice(f"unexpected section(s): {', '.join('## ' + h for h in stray)} — "
+                           f"a profile has exactly {', '.join('## ' + h for h in SECTIONS)}")
     missing = [s for s in SECTIONS if s not in got]
     if missing:
         raise InvalidVoice(f"missing section(s): {', '.join('## ' + s for s in missing)}")

@@ -7,7 +7,9 @@
     topics are logged;
   * a voice rebuild cannot drop a section or touch `## Yours`, and its stamp drives
     staleness;
-  * posting a draft saves the text and marks the draft, once.
+  * posting a draft saves the text under the post's X id and marks the draft, once;
+  * tweets/drafts/ holds exactly the open drafts, and neither it nor tweets/archives/ is
+    read as tweets.
 """
 import json
 import os
@@ -60,6 +62,10 @@ class Tmp(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = os.path.join(self.tmp.name, "tweets")
         os.makedirs(self.root)
+        # Anything that syncs drafts/ must land here, never in the real tweets/.
+        p = mock.patch.dict(os.environ, {"ELICITER_TWEETS_DIR": self.root})
+        p.start()
+        self.addCleanup(p.stop)
 
 
 class TestImport(Tmp):
@@ -85,7 +91,7 @@ class TestImport(Tmp):
         js = self.write_js()
         import_tweets.run(js, root=self.root, log=None)
         c = import_tweets.run(js, root=self.root, log=None)
-        self.assertEqual((c["imported"], c["already had"]), (0, 3))
+        self.assertEqual((c["imported"], c["updated"], c["unchanged"]), (0, 0, 3))
 
     def test_dry_run_writes_nothing(self):
         c = import_tweets.run(self.write_js(), root=self.root, dry_run=True, log=None)
@@ -96,19 +102,52 @@ class TestImport(Tmp):
 class TestStore(Tmp):
     def test_never_overwrites(self):
         when = datetime(2026, 11, 17, 12, tzinfo=timezone.utc)
-        p, made = tweetstore.save("first", when, id="7", root=self.root)
-        self.assertTrue(made)
-        p2, made2 = tweetstore.save("changed", when, id="7", root=self.root)
-        self.assertEqual((p2, made2), (p, False))
+        p, outcome = tweetstore.save("first", when, id="7", root=self.root)
+        self.assertEqual(outcome, "created")
+        p2, outcome2 = tweetstore.save("changed", when, id="7", root=self.root)
+        self.assertEqual((p2, outcome2), (p, "unchanged"))
         self.assertEqual(tweets.load(self.root)[0]["text"], "first")
 
     def test_id_cannot_escape(self):
-        p, _ = tweetstore.save("x", id="../../etc/passwd", root=self.root)
+        when = datetime(2026, 11, 17, 12, tzinfo=timezone.utc)
+        p, _ = tweetstore.save("x", when, id="../../etc/passwd", root=self.root)
         self.assertTrue(os.path.realpath(p).startswith(os.path.realpath(self.root) + os.sep))
 
-    def test_empty_is_refused(self):
+    def test_empty_and_idless_are_refused(self):
         with self.assertRaises(tweetstore.TweetStoreError):
-            tweetstore.save("   ", root=self.root)
+            tweetstore.save("   ", id="7", root=self.root)
+        with self.assertRaises(tweetstore.TweetStoreError):
+            tweetstore.save("no id", datetime.now(timezone.utc), root=self.root)
+        self.assertEqual(os.listdir(self.root), [])
+
+    def test_id_from_link_and_date_from_id(self):
+        for v in (ID, f"https://x.com/someone/status/{ID}", f"x.com/someone/status/{ID}?s=20",
+                  f"https://twitter.com/someone/status/{ID}/photo/1"):
+            self.assertEqual(tweetstore.parse_id(v), ID, v)
+        for bad in ("", "abc", "https://x.com/someone", "12 34"):
+            with self.assertRaises(tweetstore.TweetStoreError, msg=bad):
+                tweetstore.parse_id(bad)
+        self.assertEqual(tweetstore.id_date(ID), ID_DATE)
+        self.assertIsNone(tweetstore.id_date("7"))
+        p, _ = tweetstore.save("dated by its id", id=ID, root=self.root)
+        self.assertEqual(os.path.basename(p), f"2026-11-17-{ID}.md")
+
+    def test_subfolders_are_not_tweets(self):
+        for sub in (tweetstore.DRAFTS, tweetstore.ARCHIVES):
+            os.makedirs(os.path.join(self.root, sub))
+            with open(os.path.join(self.root, sub, "2026-01-01-x.md"), "w") as fh:
+                fh.write("not a tweet\n")
+        self.assertEqual((tweets.load(self.root), tweets.count(self.root)), ([], 0))
+
+    def test_newest_archive(self):
+        with self.assertRaises(SystemExit):
+            import_tweets.newest_archive(self.root)
+        d = os.path.join(self.root, tweetstore.ARCHIVES)
+        os.makedirs(d)
+        for i, n in enumerate(("old.zip", "new.zip", "notes.txt")):
+            open(os.path.join(d, n), "w").close()
+            os.utime(os.path.join(d, n), (1000 + i, 1000 + i))
+        self.assertEqual(os.path.basename(import_tweets.newest_archive(self.root)), "new.zip")
 
     def test_bare_file_is_read(self):
         with open(os.path.join(self.root, "2023-01-02-hand.txt"), "w") as fh:
@@ -119,6 +158,9 @@ class TestStore(Tmp):
 
 
 SRC = [{"source": "tweets", "ref": "2024-03-05-1.md"}]
+# A real-shaped snowflake: (ID >> 22) + X's epoch is 2026-11-17T22:31:32.000Z.
+ID_DATE = datetime(2026, 11, 17, 22, 31, 32, tzinfo=timezone.utc)
+ID = str((int(ID_DATE.timestamp() * 1000) - 1288834974657) << 22 | 12345)
 
 
 class TestDrafts(Tmp):
@@ -257,6 +299,13 @@ class TestVoice(Tmp):
         v = voice.load(n_tweets=5)
         self.assertEqual((v["stale"], v["tweets_since"]), (True, 2))
 
+    def test_duplicated_or_stray_sections_are_refused(self):
+        """A rebuild that drags the old profile along after itself must not install."""
+        for bad in (PROFILE + "\n" + PROFILE, PROFILE + "\n## Notes\nx\n"):
+            self.draft(bad)
+            with self.assertRaises(voice.InvalidVoice):
+                voice.install(4)
+
     def test_yours_cannot_change(self):
         self.draft(PROFILE)
         voice.install(3)
@@ -273,46 +322,106 @@ class TestPost(Tmp):
         super().setUp()
         self.path = os.path.join(self.tmp.name, "tweets.json")
         tweetrun.add_draft("one", "A", SRC, r=run.tweet_run(self.path))
-        p = mock.patch.dict(os.environ, {"ELICITER_TWEETS_DIR": self.root})
-        p.start()
-        self.addCleanup(p.stop)
 
-    def test_post_saves_then_marks_once(self):
-        r = run.tweet_run(self.path)
+    def r(self):
+        return run.tweet_run(self.path)
+
+    def top(self):
+        return sorted(n for n in os.listdir(self.root)
+                      if os.path.isfile(os.path.join(self.root, n)))
+
+    def drafts(self):
+        return sorted(tweetstore.draft_files(self.root).values())
+
+    def test_post_saves_under_the_id_then_marks_once(self):
         with self.assertRaises(run.StaleRun):
-            tweetrun.post(1, title="not A", r=r)
-        self.assertEqual(os.listdir(self.root), [])
+            tweetrun.post(1, ID, title="not A", r=self.r())
+        with self.assertRaises(tweetrun.InvalidTweets):
+            tweetrun.post(1, "not an id", r=self.r())
+        self.assertEqual(self.top(), [])
 
-        tweetrun.post(1, text="one, but better", title="A", r=r)
+        tweetrun.post(1, f"https://x.com/me/status/{ID}", text="one, but better", title="A",
+                      r=self.r())
         [t] = tweets.load(self.root)
-        self.assertEqual(t["text"], "one, but better")
-        d = run.tweet_run(self.path).find(1)
-        self.assertEqual((d["status"], d["posted_text"], d["posted_file"]),
-                         ("posted", "one, but better", t["file"]))
+        self.assertEqual((t["file"], t["text"], t["id"], t["date"]),
+                         (f"2026-11-17-{ID}.md", "one, but better", ID, ID_DATE))
+        d = self.r().find(1)
+        self.assertEqual((d["status"], d["posted_text"], d["posted_file"], d["posted_id"]),
+                         ("posted", "one, but better", t["file"], ID))
         with self.assertRaises(ValueError):
-            tweetrun.post(1, r=run.tweet_run(self.path))
-        self.assertEqual(len(os.listdir(self.root)), 1)
+            tweetrun.post(1, ID, r=self.r())
+        self.assertEqual(len(self.top()), 1)
+
+    def test_import_after_posting_replaces_it_with_the_archive(self):
+        """Same name, so no duplicate; and the archive's copy — with its likes — wins."""
+        _, path = tweetrun.post(1, ID, r=self.r())
+        js = os.path.join(self.tmp.name, "tweets.js")
+        t = _tw(ID, "one")["tweet"]
+        t["created_at"] = ID_DATE.strftime("%a %b %d %H:%M:%S +0000 %Y")
+        with open(js, "w", encoding="utf-8") as fh:
+            fh.write("window.YTD.tweets.part0 = " + json.dumps([{"tweet": t}]))
+        c = import_tweets.run(js, root=self.root, dry_run=True, log=None)
+        self.assertEqual((c["imported"], c["updated"]), (0, 1))
+        self.assertIsNone(tweets.load(self.root)[0]["likes"])      # dry run wrote nothing
+        c = import_tweets.run(js, root=self.root, log=None)
+        self.assertEqual((c["imported"], c["updated"], c["unchanged"]), (0, 1, 0))
+        [got] = tweets.load(self.root)
+        self.assertEqual((got["file"], got["likes"], got["retweets"]),
+                         (os.path.basename(path), 4, 1))
+        c = import_tweets.run(js, root=self.root, log=None)
+        self.assertEqual((c["updated"], c["unchanged"]), (0, 1))
+
+    def test_drafts_folder_holds_the_open_drafts(self):
+        self.assertEqual(self.drafts(), ["%s-draft-1.md" % self.r().find(1)["created_at"][:10]])
+        tweetrun.add_draft("two", "B", SRC, r=self.r())
+        self.assertEqual(len(self.drafts()), 2)
+        tweetrun.revise(2, text="two, revised", r=self.r())
+        with open(os.path.join(self.root, "drafts", self.drafts()[1]), encoding="utf-8") as fh:
+            self.assertIn("two, revised", fh.read())
+        mine = os.path.join(self.root, "drafts", "something-of-yours.md")
+        open(mine, "w").close()
+
+        tweetrun.decide(2, "rejected", r=self.r())
+        self.assertEqual(len(self.drafts()), 1)
+        tweetrun.decide(2, "open", r=self.r())
+        self.assertEqual(len(self.drafts()), 2)
+        tweetrun.post(1, ID, r=self.r())
+        self.assertEqual([n[-10:] for n in self.drafts()], ["draft-2.md"])
+        self.assertTrue(os.path.exists(mine))              # not a draft file: left alone
+        with self.assertRaises(ValueError):
+            tweetrun.decide(2, "posted", r=self.r())
+
+    def test_a_draft_posted_without_an_id_can_be_given_one(self):
+        r = self.r()
+        r.mark(1, "posted", extra={"posted_text": "one, as sent", "posted_file": "old.md"})
+        r.save()
+        tweetrun.post(1, ID, r=self.r())
+        d = self.r().find(1)
+        self.assertEqual((d["posted_file"], d["posted_id"]), (f"2026-11-17-{ID}.md", ID))
+        self.assertEqual(tweets.load(self.root)[0]["text"], "one, as sent")
+        with self.assertRaises(ValueError):
+            tweetrun.post(1, ID, r=self.r())
 
     def test_revise_keeps_history_and_refuses_posted(self):
-        d = tweetrun.revise(1, text="one, sharper", r=run.tweet_run(self.path))
+        d = tweetrun.revise(1, text="one, sharper", r=self.r())
         self.assertEqual((d["n"], d["title"], d["length"]), (1, "A", 12))
-        tweetrun.revise(1, title="B", r=run.tweet_run(self.path))
-        d = run.tweet_run(self.path).find(1)
+        tweetrun.revise(1, title="B", r=self.r())
+        d = self.r().find(1)
         self.assertEqual((d["text"], d["title"]), ("one, sharper", "B"))
         self.assertEqual([v["text"] for v in d["revisions"]], ["one"])
         self.assertEqual(d["sources"][0]["source"], "tweets")
         for kw in ({}, {"text": "one, sharper"}, {"text": "a" * 281}, {"title": " "}):
             with self.assertRaises(tweetrun.InvalidTweets, msg=kw):
-                tweetrun.revise(1, r=run.tweet_run(self.path), **kw)
+                tweetrun.revise(1, r=self.r(), **kw)
         with self.assertRaises(KeyError):
-            tweetrun.revise(9, text="x", r=run.tweet_run(self.path))
-        tweetrun.post(1, r=run.tweet_run(self.path))
+            tweetrun.revise(9, text="x", r=self.r())
+        tweetrun.post(1, ID, r=self.r())
         self.assertEqual(tweets.load(self.root)[0]["text"], "one, sharper")
         with self.assertRaises(ValueError):
-            tweetrun.revise(1, text="later", r=run.tweet_run(self.path))
+            tweetrun.revise(1, text="later", r=self.r())
 
     def test_post_defaults_to_the_draft(self):
-        tweetrun.post(1, r=run.tweet_run(self.path))
+        tweetrun.post(1, ID, r=self.r())
         self.assertEqual(tweets.load(self.root)[0]["text"], "one")
 
 

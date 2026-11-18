@@ -11,7 +11,8 @@ skill):
   4. only then is it saved here, as a draft, through `scripts/tweets.sh draft`.
 
 So a draft in `state/tweets.json` is always something you finalized. The Tweets tab shows
-it with Copy and Posted / Not this one, exactly like before.
+it with Copy and Posted / Not this one, exactly like before. Each open draft also sits in
+`tweets/drafts/` as a file (`sync`), so you can see what is waiting from the folder.
 
 Beside the drafts sits the **topic log**: every topic a session pitched, and what became
 of it — `drafted`, `passed` (you turned it down), or `skipped` (the session ran out of
@@ -100,6 +101,7 @@ def add_draft(text, title, sources, because="", r=None):
              "sources": srcs, "because": (because or "").strip(), "created_at": _now()}
     r.prompts.append(draft)
     r.save()
+    sync(r)
     return draft
 
 
@@ -142,7 +144,28 @@ def revise(n, text=None, title=None, r=None):
         raise InvalidTweets(f"draft {n} already says that — nothing changed")
     draft["revised_at"] = _now()
     r.save()
+    sync(r)
     return draft
+
+
+def sync(r=None, root=None):
+    """Make `tweets/drafts/` hold exactly the open drafts. Called after every change; safe to
+    call any time. Returns `(written, removed)`."""
+    r = r or run.tweet_run()
+    return tweetstore.sync_drafts(
+        [d for d in r.prompts if status_of(d, TWEET_STATUSES) == "open"], root=root)
+
+
+def decide(n, status, title=None, r=None):
+    """Mark draft `n` rejected or open again (posting is `post`), and keep drafts/ in step:
+    a rejected draft leaves the folder, one put back on offer returns to it."""
+    if status == "posted":
+        raise ValueError("posting needs the post's X id — use post(n, id)")
+    r = r or run.tweet_run()
+    marked = r.mark(n, status, expect_title=title)
+    r.save()
+    sync(r)
+    return marked
 
 
 def log_topic(title, sources, outcome, note="", r=None):
@@ -164,15 +187,20 @@ def log_topic(title, sources, outcome, note="", r=None):
     return entry
 
 
-def post(n, text=None, title=None, r=None):
+def post(n, id, text=None, title=None, r=None):
     """Mark draft `n` posted and save what went out to tweets/. Returns `(draft, path)`.
 
     Shared by `scripts/tweets.sh posted` and the web UI's "Posted this", so the two cannot
-    disagree about what posting means. `text` is what you actually posted, if you changed
-    it on the way out; otherwise the draft's own text. It is saved before the draft is
-    marked, so a failed save never leaves a draft marked posted with no file behind it.
+    disagree about what posting means. `id` is the post's X id, or its link: the tweet is
+    saved as `YYYY-MM-DD-<id>.md`, dated by the id, which is the same name an archive import
+    gives it — so importing later never saves it twice (it refreshes this file instead). `text` is what you actually posted,
+    if you changed it on the way out; otherwise the draft's own text. It is saved before the
+    draft is marked, so a failed save never leaves a draft marked posted with no file
+    behind it. If the file is already there (the archive got there first), it is left as
+    it is and the draft simply points at it.
 
-    A draft already posted is refused rather than saved twice. Reopening one does not
+    A draft already posted is refused rather than saved twice — unless it was posted before
+    posts carried ids, in which case this attaches the id to it. Reopening one does not
     delete its file — tweets/ only ever grows by your hand, never shrinks by eliciter's.
     """
     r = r or run.tweet_run()
@@ -182,11 +210,21 @@ def post(n, text=None, title=None, r=None):
     if title is not None and str(title).strip() != str(draft.get("title") or "").strip():
         raise run.StaleRun(f"draft {n} is now {draft.get('title')!r} — the list changed "
                            "while you were looking at it; refresh and decide again")
-    if status_of(draft, TWEET_STATUSES) == "posted":
+    try:
+        tid = tweetstore.parse_id(id)
+    except tweetstore.TweetStoreError as e:
+        raise InvalidTweets(str(e)) from None
+    already = status_of(draft, TWEET_STATUSES) == "posted"
+    if already and draft.get("posted_id"):
         raise ValueError(f"draft {n} is already posted ({draft.get('posted_file', '')})")
-    text = _check_text(text if text and str(text).strip() else draft.get("text"))
-    path, _ = tweetstore.save(text, datetime.now(timezone.utc))
-    r.mark(n, "posted", expect_title=title, extra={
-        "posted_text": text, "posted_file": os.path.basename(path)})
+    default = draft.get("posted_text") if already else draft.get("text")
+    text = _check_text(text if text and str(text).strip() else default)
+    path, _ = tweetstore.save(text, id=tid, url=f"https://x.com/i/status/{tid}")  # never replaces
+    extra = {"posted_text": text, "posted_file": os.path.basename(path), "posted_id": tid}
+    if already:
+        draft.update(extra)
+    else:
+        r.mark(n, "posted", expect_title=title, extra=extra)
     r.save()
+    sync(r)
     return draft, path
