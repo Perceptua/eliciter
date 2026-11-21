@@ -12,8 +12,8 @@ of the guards, not payload contents, because the payloads legitimately change an
 here is to catch a 500, a missing name, or a guard that stopped guarding.
 
 It runs the real server against the real corpus, like `doctor.py` does. A source being
-unreachable (the indexia container down) must not fail it: `sources_payload` reports that
-in `errors` and still returns 200, and that behaviour is itself worth pinning.
+unreachable (the indexia container down) must not fail it: that kind answers 503 with the
+reason, the other kinds still answer 200, and that behaviour is itself worth pinning.
 """
 import json
 import os
@@ -84,24 +84,42 @@ class TestRoutes(unittest.TestCase):
         for key in ("papers", "prompts", "tweets", "voice", "config"):
             self.assertIn(key, data)
 
-    def test_sources_catalogue(self):
-        """The route whose helpers were deleted out from under it."""
-        code, body = self.get("/api/sources")
-        self.assertEqual(code, 200, body[:400])
-        data = json.loads(body)
-        for key in ("posts", "misc", "tweets", "sessions", "notes", "papers", "errors"):
-            self.assertIn(key, data)
+    def test_sources_every_kind_answers(self):
+        """The route whose helpers were deleted out from under it — now one kind at a time.
+        Every kind answers 200, or 503 when its source is unreachable (indexia down), never
+        500; and the page shape holds."""
+        for kind in webui.SOURCE_KINDS:
+            code, body = self.get(f"/api/sources?kind={kind}")
+            self.assertIn(code, (200, 503), f"{kind}: {body[:400]}")
+            if code != 200:
+                continue
+            data = json.loads(body)
+            for key in ("kind", "source", "items", "total", "offset", "next"):
+                self.assertIn(key, data, kind)
+            self.assertLessEqual(len(data["items"]), 10, kind)
+            self.assertEqual(data["next"] is None, len(data["items"]) >= data["total"], kind)
+        self.assertEqual(self.get("/api/sources?kind=nope")[0], 404)
+        self.assertEqual(self.get("/api/sources")[0], 404)
+        self.assertEqual(self.get("/api/sources?kind=posts&offset=abc")[0], 400)
+
+    def test_sources_pages_join_up(self):
+        """Page two starts where page one stopped, with nothing repeated or skipped."""
+        for kind in ("posts", "tweets", "sessions"):
+            first = json.loads(self.get(f"/api/sources?kind={kind}&limit=3")[1])
+            if first["next"] is None:
+                continue
+            second = json.loads(self.get(f"/api/sources?kind={kind}&offset=3&limit=3")[1])
+            both = json.loads(self.get(f"/api/sources?kind={kind}&limit=6")[1])
+            self.assertEqual([r["ref"] for r in first["items"] + second["items"]],
+                             [r["ref"] for r in both["items"]], kind)
 
     def test_source_reader_round_trip(self):
-        """Open the first thing the catalogue offers. Skips only if there is nothing."""
-        data = json.loads(self.get("/api/sources")[1])
-        for kind in ("posts", "misc", "tweets", "sessions", "notes", "papers"):
-            rows = data.get(kind) or []
+        """Open the newest item of every kind. Skips a kind only if it is empty or down."""
+        for kind, (source, _) in webui.SOURCE_KINDS.items():
+            code, body = self.get(f"/api/sources?kind={kind}&limit=1")
+            rows = json.loads(body)["items"] if code == 200 else []
             if not rows:
                 continue
-            source = {"posts": "perceptua", "misc": "misc", "tweets": "tweets",
-                      "sessions": "audua",
-                      "notes": "indexia", "papers": "arxiv"}[kind]
             ref = urllib.parse.quote(str(rows[0]["ref"]))
             code, body = self.get(f"/api/source?source={source}&ref={ref}")
             self.assertEqual(code, 200, f"{source}: {body[:300]}")
@@ -183,6 +201,33 @@ class TestRoutes(unittest.TestCase):
                 self.assertEqual(self.post("/api/tweet", {"n": 9, "status": "rejected"})[0], 404)
                 self.assertEqual(self.post("/api/tweet", {"n": 1, "status": "rejected"},
                                            headers={"X-Eliciter": ""})[0], 403)
+
+    def test_books_pages(self):
+        """The books card, against a temp books/: ten at a time, newest read first, no
+        summary, and `next` running out exactly at the end."""
+        import tempfile
+        from unittest import mock
+        from eliciterlib import bookstore
+        with tempfile.TemporaryDirectory() as d:
+            for i in range(12):
+                bookstore.add(f"Play {i}", "W. S.", "finished", f"2026-01-{i + 1:02d}",
+                              finished=f"2026-03-{i + 1:02d}", summary="s", root=d)
+            with mock.patch.dict(os.environ, {"ELICITER_BOOKS_DIR": d}):
+                code, body = self.get("/api/sources?kind=books")
+                self.assertEqual(code, 200, body[:300])
+                first = json.loads(body)
+                self.assertEqual((len(first["items"]), first["total"], first["next"]),
+                                 (10, 12, 10))
+                self.assertEqual(first["items"][0]["title"], "Play 11")
+                self.assertNotIn("summary", first["items"][0])
+                rest = json.loads(self.get(
+                    f"/api/sources?kind=books&offset={first['next']}&limit=10")[1])
+                self.assertEqual((len(rest["items"]), rest["next"]), (2, None))
+                self.assertEqual(rest["items"][-1]["title"], "Play 0")
+                ref = urllib.parse.quote(first["items"][0]["ref"])
+                code, body = self.get(f"/api/source?source=books&ref={ref}")
+                self.assertEqual((code, json.loads(body)["body"]), (200, "s"))
+                self.assertEqual(self.get("/api/source?source=books&ref=nope")[0], 404)
 
     # -- failures are 404s, never 500s ---------------------------------------
     def test_unknown_source_is_404(self):

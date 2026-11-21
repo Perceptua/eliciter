@@ -20,7 +20,6 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -139,15 +138,11 @@ def cmd_accept(a, log):
             added.append(entry)
     q.save()
 
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    out = config.out_dir("digest")
-    text = arxiv.render_queue(q, day=day, swept=data.get("swept"))
-    for name in (f"{day}.md", "latest.md"):
-        with open(os.path.join(out, name), "w", encoding="utf-8") as fh:
-            fh.write(text)
-
+    # No digest file any more (retired 2026-11-21): it was a markdown copy of the queue,
+    # rewritten only here, so every read/reject after a sweep left it stale. The queue is
+    # state/papers.json, shown live on the Queue tab and by `scripts/papers.sh`.
     print(f"[sweep] queued {len(added)} of {len(chosen)} pick(s); "
-          f"{len(q.active())} waiting (cap {cap})\n  {os.path.join(out, 'latest.md')}")
+          f"{len(q.active())} waiting (cap {cap}) — see the Queue tab or scripts/papers.sh")
     for p in overflow:
         print(f"  no room for  {p['id']}  {p['title'][:60]}", file=sys.stderr)
     return 0

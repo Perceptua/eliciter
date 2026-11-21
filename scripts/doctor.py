@@ -101,6 +101,17 @@ def c_tweets():
     return OK, f"{len(items)} tweet(s), latest {items[0]['date'].date()} · {state} (read-only)"
 
 
+def c_books():
+    from eliciterlib import books
+    items = books.load()
+    if not items:
+        return MEH, (f"{config.books_dir()} — empty; ask a session to add a book, or "
+                     "scripts/books.sh demo for samples")
+    demo = sum(1 for b in items if b["demo"])
+    return OK, (f"{len(items)} book(s)" + (f", {demo} of them demo samples" if demo else "")
+                + " (read-only but for bookstore.py)")
+
+
 def c_audua():
     from eliciterlib import audua
     sessions = audua.sessions()
@@ -208,7 +219,7 @@ def main():
     checks = [("config", c_config), ("indexia graph", c_graph),
               ("read-only gate", c_gate), ("indexia moves", c_moves),
               ("perceptua posts", c_posts), ("misc folder", c_misc),
-              ("tweets", c_tweets),
+              ("tweets", c_tweets), ("books", c_books),
               ("audua sessions", c_audua),
               ("interest profile", c_profile), ("reading queue", c_queue),
               ("material", c_material), ("sweep candidates", c_candidates)]

@@ -39,7 +39,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-from . import arxiv, audua, config, corpus, misc, posts, run, status, tweets, voice
+from . import arxiv, audua, books, config, corpus, misc, posts, run, status, tweets, voice
 
 NAME = "material.json"
 
@@ -161,6 +161,11 @@ def _dormant_topics(data):
         since.append((t.get("date") or "", {"source": "tweets", "ref": t.get("ref"),
                                             "title": (t.get("text") or "")[:80],
                                             "kind": "tweet"}))
+    for b in data.get("books") or []:
+        if b.get("finished") or b.get("status") == "reading":
+            since.append((b.get("finished") or b.get("started") or "",
+                          {"source": "books", "ref": b.get("ref"), "title": b.get("title"),
+                           "kind": "reading"}))
     for p in papers.get("read") or []:
         since.append((p.get("read_on") or "", {"source": "arxiv", "ref": p.get("ref"),
                                                "title": p.get("title"), "kind": "reading"}))
@@ -222,7 +227,7 @@ def _signal_dicts(signals):
 
 
 def gather(log=print, want_papers=True, want_graph=True, want_posts=True, want_misc=True,
-           want_audua=True, want_tweets=True):
+           want_audua=True, want_tweets=True, want_books=True):
     """Read every source and return the material, plus a note of what failed.
 
     A source that is unreachable is recorded in `unavailable` and skipped rather than
@@ -314,6 +319,18 @@ def gather(log=print, want_papers=True, want_graph=True, want_posts=True, want_m
         out["previous_tweets"] = _tweet_history()
         out["tweet_lessons"] = _tweet_lessons()
 
+    # Your reading outside arxiv. Every book goes in with its summary — the summary exists
+    # for exactly this reader: a session that has not read the book and needs to know what
+    # it is before connecting it to anything. Order is the books card's: newest read first.
+    # Sample books (`scripts/books.sh demo`) are left out: they are for trying the tab, and
+    # a session should never pitch a prompt from a play the user did not read.
+    if want_books:
+        attempt("books", lambda: [
+            {"ref": b["ref"], "title": b["title"], "author": b["author"],
+             "status": b["status"], "started": b["started"], "finished": b["finished"],
+             "text": b["summary"]}
+            for b in books.load() if not b["demo"]], [])
+
     if want_audua:
         def _audua():
             every = audua.sessions()
@@ -403,6 +420,7 @@ def summarize(data):
         "sessions": len(data.get("sessions") or []),
         "recent sessions": sum(1 for s in (data.get("sessions") or [])
                                if s.get("recent")),
+        "books": len(data.get("books") or []),
         "papers read": len(papers.get("read") or []),
         "papers waiting": len(papers.get("waiting") or []),
     }

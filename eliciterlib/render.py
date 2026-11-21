@@ -64,6 +64,7 @@ SOURCE_HEADINGS = {
     "misc": "From your other writing — misc",
     "tweets": "From your tweets",
     "audua": "From your recordings — audua",
+    "books": "From your reading — books",
     "arxiv": "From your reading — arxiv",
 }
 

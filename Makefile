@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-.PHONY: help ui ui-up ui-down ui-status ui-restart doctor test sweep queue gather prompts tweets import-tweets write clean
+.PHONY: help ui ui-up ui-down ui-status ui-restart doctor test sweep queue gather prompts tweets books import-tweets write clean
 
 help:              ## show this help
 	@grep -hE '^[a-z-]+:.*?##' $(MAKEFILE_LIST) \
@@ -46,11 +46,14 @@ prompts:           ## validate + render the prompts a session wrote
 tweets:            ## your finalized tweet drafts, and recent topics
 	@bash scripts/tweets.sh show
 
+books:             ## your reading list outside arxiv, newest read first
+	@bash scripts/books.sh
+
 import-tweets:     ## import an X archive into tweets/ (newest in tweets/archives/, or ARCHIVE=path)
 	@bash scripts/import-tweets.sh $(if $(ARCHIVE),"$(ARCHIVE)")
 
 write:             ## list prompts on offer (then: scripts/write.sh <n>)
 	@bash scripts/write.sh
 
-clean:             ## remove generated prompts and digests (keeps the queue)
-	@rm -rf prompts/*.md digest/*.md && echo "[eliciter] cleaned (state/ kept)"
+clean:             ## remove generated prompts (keeps the queue)
+	@rm -rf prompts/*.md && echo "[eliciter] cleaned (state/ kept)"

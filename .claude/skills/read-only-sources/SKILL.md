@@ -107,6 +107,15 @@ fails if any other module writes there, or if `tweetstore` mentions another sour
 If you need to write tweets from new code, call `tweetstore.save()` — do not open a file
 under the tweets dir yourself.
 
+## books/: one writer, the same way
+
+`books/` is the user's reading list outside arxiv (the `reading-list` skill). Reads go
+through `readonly.books_dir()` (or `books.load()`); `eliciterlib/bookstore.py` is the only
+writer — `add` (refuses a book already there), `update` (rewrites that one book in place),
+and `clear_demo` (deletes only files marked `demo: true`). From new code call those; do not
+open a file under the books dir yourself.
+`tests/test_readonly.py::test_only_bookstore_writes_into_books` enforces it.
+
 eliciter writes nothing about audua at all — which sessions are eligible to prompt is
 computed statelessly from each session's date against a recency window (`audua.is_recent`),
 not tracked in a file. Contrast `state/papers.json`, which *does* record a fact about your

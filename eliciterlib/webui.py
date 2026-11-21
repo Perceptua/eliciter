@@ -44,8 +44,9 @@ ranking. So the page shows, opens, and records; it does not choose.
 
 **Source material is served separately from state.** `/api/state` is polled every twenty
 seconds and has to stay cheap, so it carries prompts and the queue and nothing else.
-`/api/sources` (the catalogue: every post, every recording, the recent notes, the papers)
-and `/api/source` (one item, in full) are fetched only when you ask to look at something.
+`/api/sources?kind=…` (one kind of input — notes, posts, misc, tweets, books, recordings,
+decided papers — a page of ten at a time) and `/api/source` (one item, in full) are fetched
+only when you ask to look at something.
 That is the difference between a page that idles at two JSON reads and one that reads
 seventeen poems and three transcripts off disk three times a minute.
 
@@ -64,7 +65,8 @@ import urllib.parse
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import arxiv, audua, config, corpus, misc, posts, run, status, tweetrun, tweets, voice
+from . import (arxiv, audua, books, config, corpus, misc, posts, run, status, tweetrun,
+               tweets, voice)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE = os.path.join(HERE, "ui.html")
@@ -127,65 +129,97 @@ def _first_lines(text, n=2, width=180):
     return " / ".join(lines[:n])[:width]
 
 
-def sources_payload():
-    """Everything eliciter can read, as metadata — no bodies.
+# Each kind of input, newest first, as catalogue rows (metadata and a preview, no bodies).
+# The Sources tab opens with every kind collapsed and asks for a kind only when you expand
+# it, ten rows at a time — so opening the tab reads nothing, and expanding tweets does not
+# also read every audua transcript. `source` is the name the reader (`source_detail`)
+# opens a row's ref under.
 
-    Deliberately not part of `/api/state`: this reads seventeen posts and every session
-    summary off disk, and `/api/state` is polled on a timer. A source that is unreachable
-    contributes an empty list and a note in `errors` rather than failing the whole
-    catalogue — the queue is still worth showing when the graph is down.
-    """
-    out = {"errors": {}}
+def _rows_posts():
+    return [{"ref": p["file"], "title": p["title"], "date": p["date"].isoformat()[:10],
+             "extra": ", ".join(p["categories"]),
+             "preview": _first_lines(posts.plain_text(p))}
+            for p in sorted(posts.load(), key=lambda p: p["date"], reverse=True)]
 
-    def attempt(name, fn, default):
-        try:
-            out[name] = fn()
-        except Exception as e:                      # noqa: BLE001
-            out[name] = default
-            out["errors"][name] = f"{type(e).__name__}: {e}"
 
-    attempt("posts", lambda: [
-        {"ref": p["file"], "title": p["title"], "date": p["date"].isoformat(),
-         "categories": p["categories"], "keywords": p["keywords"],
-         "preview": _first_lines(posts.plain_text(p))}
-        for p in sorted(posts.load(), key=lambda p: p["date"], reverse=True)], [])
+def _rows_misc():
+    return [{"ref": m["file"], "title": m["title"],
+             "date": m["date"].isoformat()[:10] if m["date"] else "",
+             "preview": _first_lines(m["text"])}
+            for m in misc.load()]
 
-    attempt("misc", lambda: [
-        {"ref": m["file"], "title": m["title"],
-         "date": m["date"].isoformat() if m["date"] else "",
-         "preview": _first_lines(m["text"])}
-        for m in misc.load()], [])
 
-    attempt("tweets", lambda: [
-        {"ref": t["file"], "title": t["text"][:80], "date": t["date"].isoformat()[:10],
-         "likes": t["likes"], "preview": ""}
-        for t in tweets.load()], [])
+def _rows_tweets():
+    return [{"ref": t["file"], "title": t["text"][:80], "date": t["date"].isoformat()[:10],
+             "extra": f"{t['likes']} likes" if t["likes"] is not None else ""}
+            for t in tweets.load()]
 
-    attempt("sessions", lambda: [
-        {"ref": s["stem"], "title": f"Audua — {s['date'].isoformat()}",
-         "date": s["date"].isoformat(), "recent": audua.is_recent(s["date"]),
-         "threads": bool(s["threads"]),
-         "preview": _first_lines(s["intro"] or s["summary"])}
-        for s in audua.sessions()], [])
 
-    def _notes():
-        db = corpus.connect()
-        return [{"ref": n.get("id"), "title": n.get("title") or "(untitled)",
-                 "date": (n.get("created_at") or "")[:10],
-                 "source_ref": n.get("source_ref") or "",
-                 "preview": _first_lines(n.get("body"))}
-                for n in corpus.recent_notes(db, limit=40)]
-    attempt("notes", _notes, [])
+def _rows_books():
+    # Everything but the summary: the summary is for sessions, and
+    # it is one click away in the reader for anyone who wants it.
+    return [{"ref": b["ref"], "title": b["title"], "author": b["author"],
+             "status": b["status"], "started": b["started"], "finished": b["finished"],
+             "demo": b["demo"], "date": b["finished"] or b["started"]}
+            for b in books.load()]
 
-    q = status.Queue()
-    out["papers"] = [
-        {"ref": p.get("id"), "title": p.get("title", ""), "date": (p.get("published") or "")[:10],
-         "status": p.get("status"), "url": p.get("url", ""),
-         "matched": p.get("matched") or [], "why": p.get("why", ""),
-         "preview": _first_lines(p.get("abstract"))}
-        for p in sorted(q.papers.values(),
-                        key=lambda p: (p.get("changed_at") or ""), reverse=True)]
+
+def _rows_sessions():
+    out = []
+    for s in audua.sessions():
+        bits = (["threads left open"] if s["threads"] else []) + \
+               ([] if audua.is_recent(s["date"]) else ["older than 30d"])
+        out.append({"ref": s["stem"], "title": f"Audua — {s['date'].isoformat()}",
+                    "date": s["date"].isoformat(), "extra": " · ".join(bits),
+                    "preview": _first_lines(s["intro"] or s["summary"])})
     return out
+
+
+def _rows_papers():
+    # Papers you have decided about — what the Decided tab used to show. Unread papers are
+    # the Queue tab's: they are waiting on you, not material yet.
+    q = status.Queue()
+    decided = [p for p in q.papers.values() if p.get("status") in ("read", "rejected")]
+    return [{"ref": p.get("id"), "title": p.get("title", ""),
+             "date": (p.get("changed_at") or "")[:10], "status": p.get("status"),
+             "url": p.get("url", ""), "extra": p.get("primary_category", ""),
+             "preview": _first_lines(p.get("abstract"))}
+            for p in sorted(decided, key=lambda p: p.get("changed_at") or "", reverse=True)]
+
+
+SOURCE_KINDS = {
+    # kind: (reader source name, rows function)
+    "notes": ("indexia", None),                       # paged in the database, see below
+    "posts": ("perceptua", _rows_posts),
+    "misc": ("misc", _rows_misc),
+    "tweets": ("tweets", _rows_tweets),
+    "books": ("books", _rows_books),
+    "sessions": ("audua", _rows_sessions),
+    "papers": ("arxiv", _rows_papers),
+}
+
+
+def source_page(kind, offset=0, limit=10):
+    """One page of one kind of input, newest first: `{kind, source, items, total, offset,
+    next}`, `next` being None on the last page. KeyError for a kind that does not exist;
+    a source that is unreachable raises as it would anywhere (SystemExit → 503)."""
+    if kind not in SOURCE_KINDS:
+        raise KeyError(f"{kind!r} is not a kind of source — one of {', '.join(SOURCE_KINDS)}")
+    offset, limit = max(0, int(offset)), max(1, min(int(limit), 100))
+    source, fn = SOURCE_KINDS[kind]
+    if kind == "notes":
+        # The graph can be large, so it is paged where it lives rather than read whole.
+        rows, total = corpus.notes_page(corpus.connect(), offset, limit)
+        items = [{"ref": n.get("id"), "title": n.get("title") or "(untitled)",
+                  "date": (n.get("created_at") or "")[:10],
+                  "extra": n.get("source_ref") or "",
+                  "preview": _first_lines(n.get("body"))} for n in rows]
+    else:
+        every = fn()
+        total, items = len(every), every[offset:offset + limit]
+    nxt = offset + len(items)
+    return {"kind": kind, "source": source, "items": items, "total": total,
+            "offset": offset, "next": nxt if nxt < total else None}
 
 
 def source_detail(source, ref):
@@ -230,6 +264,16 @@ def source_detail(source, ref):
                         "subtitle": " · ".join(bits), "body": t["text"],
                         "where": os.path.join(config.tweets_dir(), t["file"])}
         raise KeyError(f"no tweet {ref!r}")
+
+    # The reader is where a book's summary *is* shown: the books card leaves it out because
+    # it is written for sessions, but a prompt citing a book should still open to something.
+    if source == "books":
+        b = books.find(ref)
+        when = b["started"] + (f" → {b['finished']}" if b["finished"] else "")
+        return {"source": source, "ref": b["ref"], "title": b["title"],
+                "subtitle": f"{b['author']} · {b['status']} · {when}",
+                "body": b["summary"] or "(no summary)",
+                "where": os.path.join(config.books_dir(), b["ref"])}
 
     if source == "voice":
         v = voice.load()
@@ -361,8 +405,12 @@ class Handler(BaseHTTPRequestHandler):
                 for r in results:
                     r["in_queue"] = queue.seen(r["id"])
                 return self._json(200, {"query": term, "results": results})
+            # One kind of input, a page at a time. Not part of /api/state: the Sources tab
+            # asks when a card is expanded and when you press "load more", and never polls.
             if url.path == "/api/sources":
-                return self._json(200, sources_payload())
+                return self._json(200, source_page((q.get("kind") or [""])[0],
+                                                   int((q.get("offset") or [0])[0]),
+                                                   int((q.get("limit") or [10])[0])))
             if url.path == "/api/source":
                 return self._json(200, source_detail((q.get("source") or [""])[0],
                                                      (q.get("ref") or [""])[0]))
@@ -371,6 +419,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, "not found", "text/plain")
         except KeyError as e:
             return self._json(404, {"error": str(e.args[0]) if e.args else "not found"})
+        except ValueError as e:                 # e.g. /api/sources?kind=books&offset=abc
+            return self._json(400, {"error": str(e)})
         except SystemExit as e:                 # sources raise SystemExit for "unreachable"
             return self._json(503, {"error": str(e)})
         except Exception as e:                  # noqa: BLE001

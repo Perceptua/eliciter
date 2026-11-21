@@ -10,7 +10,7 @@ real week, about 1160 papers** — and a persistent queue capped at `ELICITER_AR
 holds what is worth reading. The queue is the point: a paper waits there until the user says
 what became of it.
 
-    unread    waiting; this is what the digest shows — what to read next
+    unread    waiting; this is what the Queue tab shows — what to read next
     read      they read it — leaves the queue, and this is what prompts are generated from
     rejected  not for them — leaves the queue and is never offered again
 
@@ -53,8 +53,8 @@ So the funnel is now two passes with you in the middle:
 4. **Write `state/picks.json`**, best first — the order is your ranking, and the cap decides
    where the line falls.
 5. **`bash scripts/sweep.sh accept`** — validates every id against the candidate set, fills
-   the free slots in that order, reports anything that did not fit, and rewrites
-   `digest/latest.md`.
+   the free slots in that order, and reports anything that did not fit. The queued papers
+   show up on the UI's Queue tab and in `scripts/papers.sh`.
 
 ```json
 {"picks": [
@@ -63,8 +63,8 @@ So the funnel is now two passes with you in the middle:
 ]}
 ```
 
-`why` is required in practice even though the validator does not enforce it — it is printed
-in bold above each paper in `digest/latest.md`, and it is the thing that makes the queue
+`why` is required in practice even though the validator does not enforce it — it is shown
+in bold on each paper's card in the Queue tab (and under it in `papers.sh`), and it is the thing that makes the queue
 trustworthy. The overlap score rides underneath as provenance, not as the reason.
 
 ### What to pick
@@ -111,8 +111,9 @@ rejected paper gets re-added.
 Papers can be named by arxiv id, a unique prefix, or their **queue position**. Positions
 move as the queue changes, so prefer the id when writing anything down.
 
-The rendered queue is `digest/latest.md`; the state is `state/papers.json`. The UI shows the
-same queue with one-click read/reject, but **cannot sweep** — choosing papers is a
+The queue's state is `state/papers.json`; there is no rendered copy (the old
+`digest/latest.md` was retired on 2026-11-21 because it went stale after every read or
+reject). The UI's Queue tab shows it live with one-click read/reject, but **cannot sweep** — choosing papers is a
 judgement, and a browser cannot start a session.
 
 ## When the user says they have read something
