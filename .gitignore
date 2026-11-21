@@ -4,9 +4,11 @@
 # Tailscale-issued TLS cert/key for --tailscale, machine-local.
 .certs/
 
-# Generated output. Prompts and digests are derived — regenerate them.
+# Generated output. Prompts are derived — regenerate them.
 prompts/*.md
-digest/*.md
+# The arxiv digest, retired 2026-11-21. Nothing writes here any more; kept ignored so old
+# copies left on disk are never committed.
+digest/
 
 # The reading queue is real state, not derived: it holds which papers you have read and
 # rejected, and a sweep cannot reconstruct it. Ignored here only because it is personal
@@ -21,6 +23,10 @@ misc/
 # drafted tweet posted. Your own writing and the evidence for the voice profile; never
 # committed.
 tweets/
+
+# Your reading list outside arxiv, one .md per book, written by scripts/books.sh. A record
+# of your reading — personal, so never committed.
+books/
 
 __pycache__/
 *.py[cod]

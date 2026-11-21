@@ -66,7 +66,9 @@ the trust boundary in place of loopback, and there is still no login. Do not pas
 the user asks for it. The exact URL comes from the tailnet at runtime, so it is in the log,
 not predictable by the wrapper.
 
-## Six tabs
+## Five tabs, in two groups
+
+**Outputs** — the tabs where something new can come out (a prompt, a tweet, a queued paper):
 
 - **Prompts** — every elicitation with its source, register, length and target project.
   The material is shown in place as prose (clipped, with "show the rest"), not hidden behind
@@ -90,12 +92,18 @@ not predictable by the wrapper.
   The CLI twin is `scripts/tweets.sh show|revise|posted|reject|reopen`.
 - **Queue** — unread papers, with score and the terms that matched. ✓ Read / ✗ Reject.
   Marking one read is also what makes it eligible for a writing prompt.
-- **Decided** — read and rejected, with "↺ Back to queue" to undo.
-- **Sources** — everything eliciter can read, in six columns: recent indexia notes,
-  perceptua posts, misc dropped writing, your tweets, audua recordings (flagged when already offered),
-  and the paper queue. Every row opens in the reader. This is the tab for reviewing material
-  without going through a prompt.
 - **Search** — ad-hoc arxiv results, with "+ Add to queue".
+
+**Inputs** — one tab, on the right of the nav:
+
+- **Sources** — everything eliciter reads, one card per kind: indexia notes, perceptua
+  posts, misc dropped writing, tweets, books (the reading list), audua recordings, and
+  arxiv decided papers (read and rejected). The tab opens with **every card collapsed**;
+  expanding one fetches its newest ten from `/api/sources?kind=…`, and **Load 10 more**
+  pages on. Every row opens in the reader. Books show title, author, status and dates —
+  every field but the summary, which is written for sessions (the reader shows it). Decided
+  papers keep **↺ Back to queue** (this replaced the old Decided tab). Books are added and
+  updated in a session (the `reading-list` skill, `scripts/books.sh`), not on the page.
 
 The header runs the two deterministic operations: **Sweep arxiv** and a search box.
 
@@ -118,12 +126,13 @@ Two endpoints back it, both pure reads through the gate:
 
 | | |
 |---|---|
-| `GET /api/sources` | the catalogue — metadata and a preview line, no bodies |
+| `GET /api/sources?kind=&offset=&limit=` | one kind of input, newest first, a page at a time (default 10) — metadata and a preview line, no bodies; `next` is null on the last page |
 | `GET /api/source?source=&ref=` | one item in full, with `where` (also `source=voice&ref=profile`) |
 
-They are **deliberately not part of `/api/state`**, which the page polls every 20s. The
-catalogue reads every post and transcript off disk; folding it into the poll would do that
-three times a minute for a tab that may never be opened. If you add to the page, keep that
+They are **deliberately not part of `/api/state`**, which the page polls every 20s (and the
+poll does not repaint the Sources tab). A kind reads every post or transcript off disk;
+folding that into the poll would do it three times a minute for a card that may never be
+opened. If you add to the page, keep that
 split — fetch source material on demand.
 
 ## Search vs sweep

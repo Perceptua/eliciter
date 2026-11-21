@@ -15,9 +15,13 @@ it opens a session in the project where the writing belongs.
 reading and writing, you write the tweet together, and each one you call finished waits on
 the Tweets tab until you post it. See [Tweets](#6-tweets-composed-in-conversation).
 
+**Books** — what you read outside arxiv — are added the same way: say you want to add one,
+and a session asks for what it needs. See [Books](#7-books-your-reading-outside-arxiv).
+
 It **cannot write to indexia, perceptua, audua, or misc**. That is enforced by code and by
 tests, not by convention. `tweets/` has exactly one writer, for two acts you take: importing
-your archive, and saying you posted something. See [Read-only, structurally](#read-only-structurally).
+your archive, and saying you posted something; `books/` has one too, for adding and
+updating a book. See [Read-only, structurally](#read-only-structurally).
 
 ```bash
 make ui        # the local UI in the foreground at http://127.0.0.1:8473
@@ -30,6 +34,7 @@ make prompts   # render what a session wrote  → prompts/latest.md
 make write     # list prompts; then scripts/write.sh <n>
 make tweets    # your finalized tweet drafts, and the topics pitched lately
 make import-tweets  # newest X archive in tweets/archives/ → tweets/  (or ARCHIVE=path)
+make books     # your reading list outside arxiv, newest read first
 make test      # the read-only gate, and every route still answers
 ```
 
@@ -46,23 +51,24 @@ bash scripts/ui.sh stop
 bash scripts/ui.sh status
 ```
 
-Six tabs — **Prompts** (with source, register and target project, the material shown in
+Five tabs in two groups. **Outputs** are where something new can come out of eliciter:
+**Prompts** (with source, register and target project, the material shown in
 place, one click to open any source it names, and ✓/✗ to say you wrote one or that it is
 not for you), **Tweets** (tweets you finalized in a session, with a character count, copy,
 and "Posted this" to save what you sent), **Queue** (unread, with the terms that
-matched, one click to read/reject), **Decided** (with undo), **Sources** (everything
-eliciter can read — every note, post, misc file, tweet, recording and paper — each openable in the
-reader),
-**Search** (ad-hoc arxiv, one click to add). The header runs the sweep, the elicit, and the
-search.
+matched, one click to read/reject), and **Search** (ad-hoc arxiv, one click to add).
+**Inputs** is one tab, **Sources**: everything eliciter reads, one card per kind — notes,
+posts, misc, tweets, books, recordings, and decided papers (read and rejected, with undo).
+It opens with every card collapsed; expanding one shows its newest ten, with "Load 10
+more", and every row opens in the reader. The header holds the arxiv search.
 
 **Every source a prompt names is one click away.** A prompt's material is rendered as prose
 rather than hidden behind a disclosure triangle, "Open the source" pulls up the whole post
 or transcript or note in a reader, and the same is true of a connection in the margin or a
 member of a cross-source theme — so checking whether a connection is real never means
 leaving the page. The reader shows the file's path, because the point is that you can go the
-rest of the way yourself. `/api/sources` and `/api/source` serve that, and are fetched only
-when asked for: `/api/state` polls, and reading seventeen poems three times a minute to keep
+rest of the way yourself. `/api/sources?kind=…` (a page of one kind) and `/api/source`
+serve that, and are fetched only when asked for: `/api/state` polls, and reading seventeen poems three times a minute to keep
 an unopened tab warm is the wrong trade.
 
 Stdlib `http.server`, one HTML file, no dependencies — the same zero-dependency posture as
@@ -137,18 +143,18 @@ exhaustively and where the foundations-of-mathematics and basal-cognition materi
 is. cs.AI (288) and cs.LG (330) are the firehose; `--top 40` caps them.
 
 Each queued paper then carries a **`why`** — one line on why this paper and not the other
-four hundred — printed above its abstract in `digest/latest.md`. The overlap score rides
+four hundred — shown in bold on its card in the Queue tab (and under it in `papers.sh`). The overlap score rides
 underneath as provenance. Before, the score *was* the reason, which is what made the queue
 hard to trust.
 
 ### 2. At most three papers, with status you control
 
-The digest is not a fresh list each week. It is a **queue that persists**, capped at
+The reading queue is not a fresh list each week. It is a **queue that persists**, capped at
 `ELICITER_ARXIV_KEEP` (3), and a sweep tops it up rather than replacing it.
 
 | status | meaning |
 |---|---|
-| `unread` | waiting. This is what the digest shows — what to read next. |
+| `unread` | waiting. This is what the Queue tab shows — what to read next. |
 | `read` | you read it. Leaves the queue, freeing a slot, and **this is what prompts come from**. |
 | `rejected` | not for you. Leaves the queue and **is never offered again**. |
 
@@ -399,6 +405,34 @@ scripts/gather.sh → state/material.json ──────────┤
   file with the archive's counts instead. That is how tweets arrive from now on — and why each one feeds
   the next voice rebuild.
 
+### 7. Books, your reading outside arxiv
+
+Papers come from the sweep; everything else you read — books, mostly — goes on the reading
+list, in a conversation (the `reading-list` skill):
+
+1. You say you want to add a book to your reading list.
+2. The session asks for whatever you haven't said: **title, author, start date** (past or
+   planned), **end date** if you know it, and **status** — `planned`, `reading`,
+   `finished` or `abandoned`.
+3. It writes a short **summary** of the book, reads the entry back, and saves it with
+   `scripts/books.sh add`.
+
+```bash
+bash scripts/books.sh                          # the list, newest read first
+bash scripts/books.sh update <ref> --status finished --finished 2026-11-20
+bash scripts/books.sh show <ref>               # one book, summary included
+bash scripts/books.sh demo                     # 12 sample Shakespeare plays (demo: true)
+bash scripts/books.sh demo --clear             # remove the samples, and nothing else
+```
+
+Each book is one file, `books/<title>-<author>.md` (gitignored), front matter plus the
+summary. The **books** card on the Sources tab shows ten at a time, newest read first by
+end date — what you are reading now, then what is planned, lead the list since neither has
+an end date — with "Load 10 more" at the bottom. It shows every field but the summary: **the summary is for
+sessions**, so a prompt or a tweet pitch can connect a book to your other material without
+having read it. `gather.sh` puts every book, summary included, into `state/material.json`
+(samples excluded), and `books` is a source a prompt can cite.
+
 ---
 
 ## Read-only, structurally
@@ -427,6 +461,11 @@ archive is the record of what went out. Marking a card posted never overwrites. 
 exception is `tweets/drafts/`, which mirrors the open drafts: it
 rewrites and removes its own `*-draft-<n>.md` files there, and nothing else. `test_only_tweetstore_writes_into_tweets` fails if anything else writes there.
 
+**`books/` has one writer too.** `bookstore.py` creates a file per book, refuses one already
+there, rewrites a book in place when you update it, and deletes only sample books marked
+`demo: true`. Reads go through `books_dir()`. `test_only_bookstore_writes_into_books`
+fails if anything else writes there.
+
 **The project may only use the gate.** `tests/test_readonly.py` scans this project's own
 source and fails if any module constructs an `Arcade`, calls `.command(`, or opens a source
 project for writing. A perfect gate is worth nothing if `corpus.py` can quietly build its
@@ -452,7 +491,7 @@ measured after it. What it bought was catching vocabulary mismatches inferred fr
 four-note corpus. Certain cost, speculative benefit.
 
 The replacement is instant, works from cold (state an interest before writing a note about
-it), and is legible — the digest names the terms that matched, so you can see why a paper is
+it), and is legible — the Queue tab names the terms that matched, so you can see why a paper is
 there. If the embedder ever gets a GPU, semantic ranking is worth revisiting as a *second*
 pass over this one, not as the only pass.
 
@@ -471,7 +510,7 @@ from the field's: *agents* means Levin's cells to you and LLM tool-callers to mo
 in 2026. Each excluded term costs points, so a passing mention survives and a paper *about*
 the thing sinks. This moved "SWE Refactor Bench" from 8th to last without touching the top.
 
-Tune by reading the matched terms in `digest/latest.md`; `--explain` prints the whole
+Tune by reading the matched terms on the Queue tab; `--explain` prints the whole
 profile, marking which terms are gates.
 
 ---
@@ -490,6 +529,7 @@ read from `indexia/docker/.env` at run time, so rotating it there is enough.
 | `ELICITER_ARXIV_LOOKBACK_DAYS` | `7` | |
 | `ELICITER_ARXIV_MAX_RESULTS` | `300` | see below |
 | `ELICITER_TWEETS_DIR` | `tweets/` | your tweets, one `.md` each; gitignored |
+| `ELICITER_BOOKS_DIR` | `books/` | your reading list, one `.md` per book; gitignored |
 | `ELICITER_UI_PORT` | `8473` | loopback only; 8420 is indexia's UI |
 
 ### Known limits
@@ -524,6 +564,8 @@ eliciterlib/
   tweetstore.py  the one writer into tweets/ (import, "posted", drafts/)
   voice.py     the voice profile: staleness, the rebuild check, the stamp
   tweetrun.py  save a finalized tweet as a draft; log a pitched topic; posting
+  books.py     books adapter: your reading list, newest read first, a page at a time
+  bookstore.py the one writer into books/ (add, update, clear the samples)
   signals.py   Signal, the registers, and what each one routes to
   material.py  every source → state/material.json, for a session to read
   render.py    validate what a session wrote → prompts/latest.md
@@ -532,9 +574,10 @@ eliciterlib/
 scripts/
   doctor.sh  test.sh  papers.sh  ui.sh
   gather.sh  prompts.sh  write.sh  sweep.sh
-  tweets.sh  import-tweets.sh
+  tweets.sh  import-tweets.sh  books.sh
 .claude/skills/
   reading-queue  elicit-writing  elicit-tweets  read-only-sources  eliciter-ui  scan-misc
+  reading-list
 ```
 
 Sources emit signals and know nothing about writing; `material.py` serializes them and makes

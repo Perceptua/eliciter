@@ -51,7 +51,11 @@ LEGACY_REGISTERS = {"post": {"length": "short", "project": "misc"}}
 # A prompt citing *several* sources is not in this list at all — it heads the file under
 # "across", because crossing two corpora is the one thing reading one of them could not
 # have produced.
-SOURCES = ("indexia", "perceptua", "misc", "tweets", "audua", "arxiv")
+#
+# `books` (your reading outside arxiv, see `books.py`) sits with arxiv at the end: like a
+# paper, a book is someone else's writing, and what a prompt asks of it is the claim you
+# took from it.
+SOURCES = ("indexia", "perceptua", "misc", "tweets", "audua", "books", "arxiv")
 
 # What you can have decided about a prompt. **open** is the absence of a decision, so it is
 # never written to the file — see `run.status_of`. The other two are the two things that

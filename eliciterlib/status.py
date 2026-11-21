@@ -1,13 +1,13 @@
 """The reading queue: which papers are waiting, read, or rejected.
 
-The digest is not a fresh list each week — it is a **queue that persists**, capped at
+The reading queue is not a fresh list each week — it is a **queue that persists**, capped at
 `ELICITER_ARXIV_KEEP` (3). A sweep does not replace it; it tops it up. So a paper you have
 not got to yet is still there next week, and one you rejected never comes back.
 
 That is the whole reason status is stored rather than derived. Three facts have to survive
 a sweep, and none of them is recoverable from arxiv:
 
-  * **unread** — in the queue, waiting. This is the digest: what to read next.
+  * **unread** — in the queue, waiting. This is what the Queue tab shows: what to read next.
   * **read** — you read it. It leaves the queue, freeing a slot, and **starts being
     prompted**: `signals()` below draws on read papers only.
   * **rejected** — not for you. It leaves the queue and is never offered again, however
@@ -63,7 +63,7 @@ class Queue:
 
     # -- reading the queue ---------------------------------------------------
     def active(self):
-        """Papers still awaiting you, best-scoring first — the digest, in order."""
+        """Papers still awaiting you, best-scoring first — the Queue tab, in order."""
         out = [p for p in self.papers.values() if p.get("status") in ACTIVE]
         out.sort(key=lambda p: -float(p.get("score") or 0.0))
         return out
@@ -171,7 +171,7 @@ def signals(queue=None, log=None):
     """Read papers, as signals — the single definition, used by the CLI and the web UI.
 
     **Read, not unread.** A prompt asks for the claim you took from a paper, which only
-    exists once you have read it; an unread paper is a reading suggestion and the digest
+    exists once you have read it; an unread paper is a reading suggestion and the queue
     already is one.
 
     Ordered by most recently read. Papers never leave `papers.json`, so the read set only

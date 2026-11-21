@@ -35,7 +35,14 @@
   button.primary:hover:not(:disabled) { color:#fff; filter:brightness(1.1); }
   input[type=search], #post-id { font:inherit; padding:.35rem .6rem; border:1px solid var(--line);
                        border-radius:6px; background:var(--panel); color:var(--ink); min-width:15rem; }
-  nav { display:flex; gap:.3rem; border-bottom:1px solid var(--line); margin-bottom:1rem; }
+  /* Two groups. Outputs are the tabs where something new can come out of eliciter — a
+     prompt, a tweet, a paper queued; inputs is the one tab for reviewing what it reads. */
+  nav { display:flex; flex-wrap:wrap; align-items:flex-end; gap:.3rem 1.4rem;
+        border-bottom:1px solid var(--line); margin-bottom:1rem; }
+  nav .group { display:flex; align-items:flex-end; gap:.15rem; }
+  nav .group.inputs { margin-left:auto; }
+  nav .glabel { font-size:.68rem; text-transform:uppercase; letter-spacing:.08em;
+                color:var(--dim); padding:0 .35rem .55rem 0; }
   nav button { border:0; border-bottom:2px solid transparent; border-radius:0; background:none; }
   nav button[aria-selected=true] { border-bottom-color:var(--accent); color:var(--accent); font-weight:600; }
   .card { background:var(--panel); border:1px solid var(--line); border-radius:8px;
@@ -110,9 +117,19 @@
   .members .ex { color:var(--dim); font-size:.82rem; display:block; margin-top:.1rem; }
   .src-tag { font-size:.72rem; text-transform:uppercase; letter-spacing:.06em;
              color:var(--dim); }
-  .cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(19rem,1fr)); gap:.7rem; }
-  .cols h2 { font-size:.85rem; text-transform:uppercase; letter-spacing:.07em;
-             color:var(--dim); margin:.2rem 0 .5rem; font-weight:600; }
+  /* The Sources tab: one card per kind of input, collapsed until you open it. The whole
+     header is the button, so the target is the full width of the card. */
+  .src { padding:0; }
+  .src-head { display:flex; align-items:baseline; gap:.7rem; width:100%; text-align:left;
+              border:0; border-radius:8px; background:none; padding:.75rem 1rem; }
+  .src-head:hover:not(:disabled) { color:var(--ink); background:var(--chip); }
+  .src-head .caret { color:var(--dim); width:.8rem; display:inline-block;
+                     transition:transform .15s; }
+  .src-head[aria-expanded=true] .caret { transform:rotate(90deg); }
+  .src-head h2 { font-size:.85rem; text-transform:uppercase; letter-spacing:.07em;
+                 margin:0; font-weight:600; }
+  .src-head .meta { margin-left:auto; }
+  .src-body { padding:0 1rem .4rem 2.5rem; border-top:1px solid var(--line); }
   .row { border-bottom:1px solid var(--line); padding:.45rem 0; }
   .row:last-child { border-bottom:0; }
   .row .t { font-weight:500; }
@@ -134,6 +151,15 @@
                      background:var(--bg); color:var(--ink); }
   .reader { white-space:pre-wrap; font-size:.88rem; line-height:1.62; padding:1rem;
             max-height:60vh; overflow:auto; max-width:72ch; }
+  /* A book row. A book is a fact about your reading, not an offer: title, author and the
+     dates, with the status as the one coloured thing. */
+  .row .dates { font-variant-numeric:tabular-nums; display:flex; gap:.45rem;
+                flex-wrap:wrap; align-items:center; }
+  .row .dates b { font-weight:500; margin-right:.2rem; }
+  .row .acts { display:flex; gap:.4rem; margin-top:.3rem; }
+  .row .acts button { font-size:.78rem; padding:.15rem .5rem; }
+  .chip.reading { color:var(--accent); } .chip.planned { color:var(--dim); }
+  .more { display:flex; flex-direction:column; align-items:center; gap:.4rem; margin:.8rem 0 .6rem; }
 </style>
 </head>
 <body>
@@ -147,12 +173,17 @@
 </header>
 <main>
   <nav id="tabs">
-    <button data-tab="prompts" aria-selected="true">Prompts</button>
-    <button data-tab="tweets" aria-selected="false">Tweets</button>
-    <button data-tab="papers" aria-selected="false">Queue</button>
-    <button data-tab="decided" aria-selected="false">Decided</button>
-    <button data-tab="sources" aria-selected="false">Sources</button>
-    <button data-tab="search" aria-selected="false">Search</button>
+    <div class="group outputs" role="group" aria-label="Outputs">
+      <span class="glabel">Outputs</span>
+      <button data-tab="prompts" aria-selected="true">Prompts</button>
+      <button data-tab="tweets" aria-selected="false">Tweets</button>
+      <button data-tab="papers" aria-selected="false">Queue</button>
+      <button data-tab="search" aria-selected="false">Search</button>
+    </div>
+    <div class="group inputs" role="group" aria-label="Inputs">
+      <span class="glabel">Inputs</span>
+      <button data-tab="sources" aria-selected="false">Sources</button>
+    </div>
   </nav>
   <section id="view"></section>
 </main>
@@ -227,7 +258,9 @@ async function api(path, opts={}) {
   return data;
 }
 
-async function refresh() { S = await api("/api/state"); paint(); }
+// Sources does not draw from /api/state, so a poll leaves it alone rather than rebuilding
+// the cards under the cursor every twenty seconds.
+async function refresh() { S = await api("/api/state"); if (tab !== "sources") paint(); }
 
 function paperCard(p, opts={}) {
   const authors = (p.authors||[]).slice(0,3).join(", ") + ((p.authors||[]).length>3 ? " et al." : "");
@@ -237,7 +270,6 @@ function paperCard(p, opts={}) {
   if (opts.queue) actions = `
     <button onclick="mark('${esc(p.id)}','read')">✓ Read</button>
     <button onclick="mark('${esc(p.id)}','rejected')">✗ Reject</button>`;
-  else if (opts.decided) actions = `<button onclick="mark('${esc(p.id)}','unread')">↺ Back to queue</button>`;
   else if (opts.search) actions = p.in_queue
     ? `<button disabled>Already queued</button>`
     : `<button onclick="addPaper('${esc(p.id)}')">+ Add to queue</button>`;
@@ -248,6 +280,7 @@ function paperCard(p, opts={}) {
       ${p.status==="read" ? '<span class="ok">✓ read</span>' : ""}
       ${p.status==="rejected" ? '<span class="no">✗ rejected</span>' : ""}
     </div>
+    ${p.why ? `<p style="margin:.45rem 0 .1rem"><strong>${esc(p.why)}</strong></p>` : ""}
     ${matched ? `<div class="meta" style="margin-top:.3rem">matched ${matched}</div>` : ""}
     <p class="abs" onclick="this.classList.toggle('open')">${esc(p.abstract)}</p>
     <div class="actions">${actions}
@@ -453,46 +486,125 @@ async function openSource(source, ref) {
   } catch (e) { toast(e.message, 4000); }
 }
 
-// The catalogue behind the Sources tab. Fetched on demand rather than folded into
-// /api/state, which polls: reading every post and transcript off disk three times a
-// minute to keep a tab warm that may never be opened is the wrong trade.
-let sources = null;
-async function loadSources(force) {
-  if (sources && !force) return sources;
-  sources = await api("/api/sources");
-  return sources;
+// --- the Sources tab: every kind of input, one card each -------------------
+//
+// Everything eliciter reads, for review. Each kind is a card that opens collapsed; expanding
+// one fetches its newest ten from /api/sources?kind=…, and "Load 10 more" pages on. Nothing
+// here is fetched until you ask — and nothing is polled — so an unopened card costs nothing,
+// and expanding tweets does not also read every audua transcript off disk.
+//
+// Books show every field but the summary (that is written for sessions, and opens in the
+// reader if you want it). Decided papers — what used to be the Decided tab — keep their
+// "↺ Back to queue" undo.
+const PAGE = 10;
+const KINDS = [
+  { kind:"notes",    label:"indexia — notes",        blurb:"your notes, newest first" },
+  { kind:"posts",    label:"perceptua — posts",      blurb:"published writing" },
+  { kind:"misc",     label:"misc — dropped writing", blurb:"fragments and scanned pages" },
+  { kind:"tweets",   label:"tweets — yours",         blurb:"what you posted" },
+  { kind:"books",    label:"books — reading list",   blurb:"newest read first; reading & planned lead" },
+  { kind:"sessions", label:"audua — recordings",     blurb:"run recordings" },
+  { kind:"papers",   label:"arxiv — decided papers", blurb:"read and rejected, newest decision first" },
+];
+// kind → { open, items, next, total, error, loading }. Reset whenever the tab is opened,
+// so Sources always starts with every card collapsed.
+let src = {};
+
+async function fetchKind(kind, offset, limit) {
+  return api(`/api/sources?kind=${kind}&offset=${offset}&limit=${limit}`);
 }
 
-function sourceRows(items, source, extra) {
-  if (!items.length) return `<p class="meta">nothing here</p>`;
-  return items.map(it => `<div class="row">
+async function loadKind(kind, more) {
+  const st = src[kind];
+  st.loading = true; st.error = ""; paintSources();
+  try {
+    const d = await fetchKind(kind, more ? st.next : 0, PAGE);
+    st.items = more ? [...st.items, ...d.items] : d.items;
+    st.next = d.next; st.total = d.total; st.source = d.source;
+  } catch (e) { st.error = e.message; }
+  st.loading = false; paintSources();
+}
+
+// After an undo the list itself changed, so re-read as many rows as were showing.
+async function reloadKind(kind) {
+  const st = src[kind];
+  if (!st || !st.open) return;
+  try {
+    const d = await fetchKind(kind, 0, Math.max(PAGE, st.items.length));
+    st.items = d.items; st.next = d.next; st.total = d.total;
+  } catch (e) { st.error = e.message; }
+  paintSources();
+}
+
+function toggleKind(kind) {
+  const st = src[kind] || (src[kind] = { open:false, items:[], next:null, total:0 });
+  st.open = !st.open;
+  if (st.open) loadKind(kind, false);       // fresh each time it is opened
+  else paintSources();
+}
+
+function genericRow(it, source) {
+  return `<div class="row">
     <div class="t">${sourceLink(source, it.ref, it.title || it.ref)}</div>
-    <div class="p">${esc(it.date || "")}${extra ? " · " + extra(it) : ""}</div>
+    <div class="p">${esc(it.date || "")}${it.extra ? " · " + esc(it.extra) : ""}</div>
     ${it.preview ? `<div class="p">${esc(it.preview)}</div>` : ""}
-  </div>`).join("");
-}
-
-function sourcesView() {
-  if (!sources) return `<div class="empty">Reading your sources…</div>`;
-  const S_ = sources, err = S_.errors || {};
-  const col = (name, title, body) => `<section class="card"><h2>${title}</h2>
-    ${err[name] ? `<p class="meta no">unavailable — ${esc(err[name])}</p>` : ""}
-    ${body}</section>`;
-  return `<div class="cols">
-    ${col("notes", "indexia — recent notes", sourceRows(S_.notes || [], "indexia",
-        it => esc(it.source_ref || "")))}
-    ${col("posts", "perceptua — posts", sourceRows(S_.posts || [], "perceptua",
-        it => (it.categories || []).join(", ")))}
-    ${col("misc", "misc — dropped writing", sourceRows(S_.misc || [], "misc"))}
-    ${col("tweets", "tweets — yours", sourceRows(S_.tweets || [], "tweets",
-        it => it.likes != null ? `${it.likes} likes` : ""))}
-    ${col("sessions", "audua — recordings", sourceRows(S_.sessions || [], "audua",
-        it => (it.threads ? "threads left open" : "") +
-              (!it.recent ? (it.threads ? " · " : "") + "older than 30d" : "")))}
-    ${col("papers", "arxiv — the queue", sourceRows(S_.papers || [], "arxiv",
-        it => esc(it.status || "")))}
   </div>`;
 }
+
+function bookRow(b) {
+  const dates = [];
+  if (b.started) dates.push(`<span><b>${b.status === "planned" ? "starts" : "started"}</b>${esc(b.started)}</span>`);
+  if (b.finished) dates.push(`<span><b>${b.status === "abandoned" ? "stopped" : "finished"}</b>${esc(b.finished)}</span>`);
+  const tone = b.status === "finished" ? " ok" : b.status === "abandoned" ? " no" : "";
+  return `<div class="row">
+    <div class="t">${sourceLink("books", b.ref, b.title)} <span class="p">${esc(b.author)}</span></div>
+    <div class="p dates">
+      <span class="chip ${esc(b.status)}${tone}">${esc(b.status || "?")}</span>
+      ${dates.join("<span>·</span>")}
+      ${b.demo ? `<span class="chip">demo</span>` : ""}
+    </div>
+  </div>`;
+}
+
+function paperRow(p) {
+  const tone = p.status === "read" ? "ok" : "no";
+  return `<div class="row">
+    <div class="t">${sourceLink("arxiv", p.ref, p.title)}</div>
+    <div class="p dates"><span class="chip ${tone}">${p.status === "read" ? "✓ read" : "✗ rejected"}</span>
+      <span>${esc(p.date)}</span>${p.extra ? `<span>· ${esc(p.extra)}</span>` : ""}</div>
+    ${p.preview ? `<div class="p">${esc(p.preview)}</div>` : ""}
+    <div class="acts">
+      <button onclick="mark('${esc(p.ref)}','unread')">↺ Back to queue</button>
+      ${p.url ? `<button onclick="window.open('${esc(p.url)}','_blank','noopener')">arxiv ↗</button>` : ""}
+    </div>
+  </div>`;
+}
+
+function kindCard(k) {
+  const st = src[k.kind] || {};
+  const count = st.open && st.total != null && !st.error && st.items ? `${st.total}` : "";
+  let body = "";
+  if (st.open) {
+    const row = k.kind === "books" ? bookRow : k.kind === "papers" ? paperRow
+              : it => genericRow(it, st.source);
+    body = `<div class="src-body">
+      ${st.error ? `<p class="meta no">unavailable — ${esc(st.error)}</p>` : ""}
+      ${!st.error && !st.items.length ? `<p class="meta">${st.loading ? "reading…" : "nothing here"}</p>` : ""}
+      ${st.items.map(row).join("")}
+      ${st.items.length ? `<div class="more"><span class="meta">showing ${st.items.length} of ${st.total}</span>
+        ${st.next != null ? `<button onclick="loadKind('${k.kind}',true)" ${st.loading ? "disabled" : ""}>Load ${PAGE} more</button>` : ""}</div>` : ""}
+    </div>`;
+  }
+  return `<section class="card src">
+    <button class="src-head" aria-expanded="${!!st.open}" onclick="toggleKind('${k.kind}')">
+      <span class="caret">▸</span><h2>${esc(k.label)}</h2>
+      <span class="meta">${esc(k.blurb)}${count ? ` · ${count}` : ""}</span>
+    </button>${body}
+  </section>`;
+}
+
+function sourcesView() { return KINDS.map(kindCard).join(""); }
+function paintSources() { if (tab === "sources") $("#view").innerHTML = sourcesView(); }
 
 function paint() {
   const v = $("#view");
@@ -546,11 +658,6 @@ function paint() {
       : `<div class="empty">Queue is empty.<br><br>
            <code>bash scripts/sweep.sh fetch</code> pulls the week, then ask a session
            to pick — <br>or find a specific paper in <strong>Search</strong> and add it.</div>`);
-  } else if (tab === "decided") {
-    const d = [...S.papers.read, ...S.papers.rejected];
-    v.innerHTML = d.length
-      ? d.map(p => paperCard(p, {decided:true})).join("")
-      : `<div class="empty">Nothing decided yet.</div>`;
   } else if (tab === "sources") {
     v.innerHTML = sourcesView();
   } else {
@@ -562,22 +669,17 @@ function paint() {
 }
 
 function show(name) {
+  if (name === "sources") src = {};         // Sources always opens with every card collapsed
   tab = name;
   document.querySelectorAll("#tabs button").forEach(b =>
     b.setAttribute("aria-selected", String(b.dataset.tab === name)));
   paint();
-  // Painted first, then filled: the catalogue is a disk read of every post and every
-  // transcript, and blocking the tab switch on it would make Sources feel broken on the
-  // first click even though it is working.
-  if (name === "sources") {
-    loadSources().then(() => { if (tab === "sources") paint(); })
-                 .catch(e => toast(e.message, 4000));
-  }
 }
 
 async function mark(id, status) {
   try { S = await api("/api/status", {method:"POST", body:JSON.stringify({id, status})});
-        paint(); toast(`marked ${status}`); }
+        paint(); toast(status === "unread" ? "back in the queue" : `marked ${status}`);
+        if (tab === "sources") reloadKind("papers"); }
   catch (e) { toast(e.message); }
 }
 // The title rides along as a staleness guard: a session can replace the whole run between

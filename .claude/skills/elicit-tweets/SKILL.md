@@ -51,7 +51,7 @@ gather → read → shortlist ≤3 topics ─┬→ pitch one ─→ pass  → l
 You are looking for **what they are actively thinking about**. In order of strength:
 
 1. **A reading their own writing has answered.** A paper marked read (`papers.read`,
-   `read_on`) followed by a note, misc entry, post or tweet that takes it up: quoting it,
+   `read_on`) or a book finished (`books`, `finished`) followed by a note, misc entry, post or tweet that takes it up: quoting it,
    arguing with it, or using its terms. Check by date and by substance, not shared
    vocabulary. A note written two days after the paper and in its terms is the strongest
    signal in the material. Say what you found and the dates.
@@ -66,7 +66,7 @@ You are looking for **what they are actively thinking about**. In order of stren
 A topic the user passed on is **dormant**. It may be pitched again only if they have
 **read or written something since that bears on it**. `previous_tweets.dormant` lists each
 passed topic with `newer`: everything dated after the pass, meaning notes, misc, posts,
-tweets and papers marked read. That list is candidates, not verdicts.
+tweets, papers marked read and books finished or being read. That list is candidates, not verdicts.
 
 - **`newer` is empty:** nothing has happened since. The topic stays down. Do not pitch it,
   and do not mention it.

@@ -25,6 +25,7 @@ DEFAULTS = {
     "ELICITER_PERCEPTUA_POSTS": "/home/aphorikles/perceptua/_posts",
     "ELICITER_MISC_DIR": os.path.join(ROOT, "misc"),
     "ELICITER_TWEETS_DIR": os.path.join(ROOT, "tweets"),
+    "ELICITER_BOOKS_DIR": os.path.join(ROOT, "books"),
     "ELICITER_AUDUA_ROOT": "/home/aphorikles/audua/processing/output",
     "ELICITER_ARXIV_CATEGORIES": "cs.AI,cs.LG,cs.NE,q-bio.NC,nlin.AO",
     "ELICITER_ARXIV_LOOKBACK_DAYS": "7",
@@ -167,6 +168,15 @@ def tweets_dir():
     it is your own writing, not eliciter's to publish. Read through the gate like every
     other source; the one sanctioned writer is `tweetstore.py` (import, and "posted")."""
     d = os.environ["ELICITER_TWEETS_DIR"]
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def books_dir():
+    """Your reading list outside arxiv, one `.md` per book. Gitignored like misc/ and
+    tweets/: it is a record of your reading, not eliciter's to publish. Read through the
+    gate; the one sanctioned writer is `bookstore.py` (adding a book, updating one)."""
+    d = os.environ["ELICITER_BOOKS_DIR"]
     os.makedirs(d, exist_ok=True)
     return d
 

@@ -44,6 +44,18 @@ def recent_notes(db, limit=12):
         f"WHERE status = 'active' ORDER BY created_at DESC LIMIT {int(limit)}"))
 
 
+def notes_page(db, offset=0, limit=10):
+    """A page of active notes, newest first, and how many there are in all — for the
+    Sources tab, which pages through the whole corpus ten at a time."""
+    total = notelib.first_row(db.query(
+        "SELECT count(*) AS n FROM Note WHERE status = 'active'")) or {}
+    rows = notelib.rows(db.query(
+        "SELECT id, title, body, created_at, source_ref FROM Note "
+        f"WHERE status = 'active' ORDER BY created_at DESC "
+        f"SKIP {max(0, int(offset))} LIMIT {max(1, int(limit))}"))
+    return rows, int(total.get("n") or 0)
+
+
 def all_notes(db):
     return notelib.rows(db.query(
         "SELECT id, title, body FROM Note WHERE status = 'active'"))

@@ -183,3 +183,9 @@ def tweets_dir(path):
     """The gated handle on the tweets folder. Like misc, it lives in this repo but holds the
     user's own writing. Reads go through here; the one writer is `tweetstore.py`."""
     return ReadOnlyDir(path)
+
+
+def books_dir(path):
+    """The gated handle on the books folder — your reading list outside arxiv. Reads go
+    through here; the one writer is `bookstore.py`."""
+    return ReadOnlyDir(path)

@@ -55,6 +55,10 @@ def cmd_list(q, a):
         num = f"{n:>2}." if n else "   "
         print(f"{num} {MARK.get(st, '?')} {float(p.get('score') or 0):.2f}  "
               f"{p['id']:<14} {p['title'][:64]}")
+        # The session's one line on why this paper was queued — the reason, where the
+        # score is only provenance. Shown for what is waiting, which is when it matters.
+        if p.get("why") and st == "unread":
+            print(f"                          {p['why']}")
     if not a.all:
         read = len(q.by_status("read"))
         rej = len(q.by_status("rejected"))

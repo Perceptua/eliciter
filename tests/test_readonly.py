@@ -209,6 +209,24 @@ class TestTweetsDirHandle(unittest.TestCase):
         self.assertEqual(public, {"names", "dirs", "read", "mtime", "root"})
 
 
+class TestBooksDirHandle(unittest.TestCase):
+    def setUp(self):
+        self.gate = readonly.books_dir(config.books_dir())
+
+    def test_lists_and_reads(self):
+        for name in self.gate.names():          # allowed to be empty
+            self.assertIsInstance(self.gate.read(name), str)
+
+    def test_refuses_path_traversal(self):
+        for bad in ("../../../etc/passwd", "../README.md", "/etc/passwd"):
+            with self.assertRaises(readonly.ReadOnlyViolation, msg=bad):
+                self.gate.read(bad)
+
+    def test_has_no_write_methods(self):
+        public = {n for n in dir(self.gate) if not n.startswith("_")}
+        self.assertEqual(public, {"names", "dirs", "read", "mtime", "root"})
+
+
 class TestProjectUsesOnlyTheGate(unittest.TestCase):
     """The other half: nothing in this project may reach around `readonly.py`."""
 
@@ -274,6 +292,28 @@ class TestProjectUsesOnlyTheGate(unittest.TestCase):
                 code = line.split("#", 1)[0]
                 if pattern.search(code) and ("tweets_dir(" in code
                                              or "ELICITER_TWEETS_DIR" in code):
+                    offences.append(f"{name}:{lineno} {line.strip()}")
+        self.assertEqual(offences, [], "\n" + "\n".join(offences))
+
+    def test_only_bookstore_writes_into_books(self):
+        """books/ has exactly one writer, the same way tweets/ does."""
+        pattern = re.compile(r"open\s*\([^)]*[\"'][wax]|os\.open\s*\(|os\.replace\s*\(|"
+                             r"os\.remove\s*\(")
+        offences = []
+        for name, path in _sources():
+            with open(path, encoding="utf-8") as fh:
+                src = fh.read()
+            if name == "bookstore.py":
+                for r in ("ELICITER_INDEXIA_ROOT", "ELICITER_PERCEPTUA_POSTS",
+                          "ELICITER_AUDUA_ROOT", "ELICITER_TWEETS_DIR", "misc_dir(",
+                          "posts_dir(", "audua_root(", "tweets_dir("):
+                    if r in src:
+                        offences.append(f"bookstore.py mentions {r}")
+                continue
+            for lineno, line in enumerate(src.splitlines(), 1):
+                code = line.split("#", 1)[0]
+                if pattern.search(code) and ("books_dir(" in code
+                                             or "ELICITER_BOOKS_DIR" in code):
                     offences.append(f"{name}:{lineno} {line.strip()}")
         self.assertEqual(offences, [], "\n" + "\n".join(offences))
 

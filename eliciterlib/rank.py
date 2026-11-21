@@ -11,7 +11,7 @@ certain and the benefit was speculative, so it went.
 What replaced it is better in two ways beyond being instant. The profile is **explicit**
 (`ELICITER_INTERESTS`), so you can state an interest before you have written a note about
 it — a cold-start the corpus-similarity version could not do at all. And the score is
-**legible**: the digest can name the terms that matched, which says why a paper surfaced
+**legible**: the queue can name the terms that matched, which says why a paper surfaced
 far more usefully than a cosine number.
 
 If the embedder ever gets a GPU, semantic ranking is worth revisiting as a second pass
