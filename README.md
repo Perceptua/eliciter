@@ -404,6 +404,10 @@ scripts/gather.sh → state/material.json ──────────┤
   import gives the same tweet — so a later import never saves it twice; it refreshes the
   file with the archive's counts instead. That is how tweets arrive from now on — and why each one feeds
   the next voice rebuild.
+- **Stats.** `scripts/tweets.sh stats <n|id|link> --likes 3 --retweets 0`, or **Stats…** on
+  a posted card, records a tweet's counts as they stand on X, so you need not request a new
+  archive to keep "What lands" current. Only the two counts change; the next import
+  replaces them with the archive's.
 
 ### 7. Books, your reading outside arxiv
 

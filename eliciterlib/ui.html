@@ -33,7 +33,7 @@
   button:disabled { opacity:.5; cursor:progress; }
   button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
   button.primary:hover:not(:disabled) { color:#fff; filter:brightness(1.1); }
-  input[type=search], #post-id { font:inherit; padding:.35rem .6rem; border:1px solid var(--line);
+  input[type=search], #post-id, input.count { font:inherit; padding:.35rem .6rem; border:1px solid var(--line);
                        border-radius:6px; background:var(--panel); color:var(--ink); min-width:15rem; }
   /* Two groups. Outputs are the tabs where something new can come out of eliciter — a
      prompt, a tweet, a paper queued; inputs is the one tab for reviewing what it reads. */
@@ -212,6 +212,23 @@
     <div class="actions" style="justify-content:space-between">
       <span class="meta" id="post-count"></span>
       <button class="primary" id="post-save">Save as posted</button>
+    </div>
+  </div>
+</dialog>
+<!-- A posted tweet's likes and retweets, as you report them, so they need not wait for the
+     next archive download. Only the two counts change; the next import replaces them. -->
+<dialog id="stats">
+  <div class="dlg-head"><strong id="stats-title">Stats</strong>
+    <button onclick="document.getElementById('stats').close()">Cancel</button></div>
+  <div style="padding:1rem">
+    <p class="meta" style="margin:0 0 .75rem">The counts on X now. The next archive import
+      replaces them with whatever X has by then.</p>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap">
+      <label class="meta">Likes<br><input id="stats-likes" class="count" type="number" min="0" step="1"></label>
+      <label class="meta">Retweets<br><input id="stats-rts" class="count" type="number" min="0" step="1"></label>
+    </div>
+    <div class="actions" style="justify-content:flex-end">
+      <button class="primary" id="stats-save">Save</button>
     </div>
   </div>
 </dialog>
@@ -400,6 +417,8 @@ function tweetCard(c) {
         lenLabel(tweetLen(shown))}</span>
         <button onclick="copyTweet(${c.n})">Copy</button>
         ${st === "posted" && c.posted_file ? sourceLink("tweets", c.posted_file, "in tweets/") : ""}
+        ${st === "posted" && c.posted_id ? `<span class="meta">${countsLabel(c)}</span>
+          <button onclick="openStats(${c.n})">Stats…</button>` : ""}
       </div></div>`;
   const actions = st === "open"
     ? `<button onclick="openPost(${c.n})">Posted this →</button>
@@ -458,6 +477,32 @@ function openPost(n) {
   };
   $("#post").showModal();
   ta.focus();
+}
+
+function countsLabel(c) {
+  if (c.likes == null && c.retweets == null) return "no counts yet";
+  const n = (v, one, many) => v == null ? "" : `${v} ${v === 1 ? one : many}`;
+  return [n(c.likes, "like", "likes"), n(c.retweets, "retweet", "retweets")].filter(Boolean).join(" · ");
+}
+
+function openStats(n) {
+  const c = S.tweets.find(x => x.n === n);
+  if (!c) return;
+  $("#stats-title").textContent = `${n}. ${c.title}`;
+  const li = $("#stats-likes"), ri = $("#stats-rts");
+  li.value = c.likes ?? ""; ri.value = c.retweets ?? "";
+  $("#stats-save").onclick = async () => {
+    const num = el => el.value.trim() === "" ? null : Number(el.value);
+    const likes = num(li), retweets = num(ri);
+    if (likes == null && retweets == null) { toast("give likes or retweets"); li.focus(); return; }
+    try {
+      S = await api("/api/tweet", {method:"POST", body: JSON.stringify({
+        n, status:"stats", likes, retweets})});
+      $("#stats").close(); paint(); toast("counts saved");
+    } catch (e) { toast(e.message, 5000); refresh().catch(() => {}); }
+  };
+  $("#stats").showModal();
+  li.focus();
 }
 
 async function decideTweet(n, status) {

@@ -228,3 +228,28 @@ def post(n, id, text=None, title=None, r=None):
     r.save()
     sync(r)
     return draft, path
+
+
+def stats(ref, likes=None, retweets=None, r=None):
+    """Record a posted tweet's likes and/or retweets, as you report them. `ref` is a posted
+    draft's number, or any posted tweet's X id or link — imported tweets included. Returns
+    `(path, outcome)`. Shared by `scripts/tweets.sh stats` and the web UI."""
+    ref = str(ref or "").strip()
+    if ref.isdigit() and len(ref) <= 6:          # a draft number; X ids run to 19 digits
+        r = r or run.tweet_run()
+        draft = r.find(int(ref))
+        if draft is None:
+            raise KeyError(f"no draft {ref} — there are {len(r.prompts)}")
+        if not draft.get("posted_id"):
+            raise InvalidTweets(f"draft {ref} has not been posted with an id — "
+                                f"`tweets.sh posted {ref} --id …` first")
+        tid = draft["posted_id"]
+    else:
+        try:
+            tid = tweetstore.parse_id(ref)
+        except tweetstore.TweetStoreError as e:
+            raise InvalidTweets(str(e)) from None
+    try:
+        return tweetstore.set_stats(tid, likes=likes, retweets=retweets)
+    except tweetstore.TweetStoreError as e:
+        raise InvalidTweets(str(e)) from None

@@ -65,8 +65,8 @@ import urllib.parse
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import (arxiv, audua, books, config, corpus, misc, posts, run, status, tweetrun,
-               tweets, voice)
+from . import (arxiv, audua, books, config, corpus, misc, posts, readonly, run, status,
+               tweetrun, tweets, voice)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE = os.path.join(HERE, "ui.html")
@@ -80,6 +80,24 @@ def _profile(db):
     return arxiv.build_profile(db, log=lambda *_: None)
 
 
+def _attach_counts(drafts):
+    """A posted card shows its likes and retweets, read from its file in tweets/ — only the
+    few files posted drafts point at, not the whole folder, since the page polls this."""
+    posted = [d for d in drafts if d["status"] == "posted" and d.get("posted_file")]
+    if not posted:
+        return
+    try:
+        gate = readonly.tweets_dir(config.tweets_dir())
+    except (OSError, SystemExit):
+        return
+    for d in posted:
+        try:
+            meta, _ = tweets.parse(gate.read(d["posted_file"]))
+        except (OSError, ValueError, readonly.ReadOnlyViolation):
+            continue
+        d["likes"], d["retweets"] = meta.get("likes"), meta.get("retweets")
+
+
 def state_payload():
     """Everything the page renders, in one round trip."""
     q = status.Queue()
@@ -88,6 +106,7 @@ def state_payload():
     listed = [{**p, "status": run.status_of(p)} for p in run.Run().prompts]
     tr = run.tweet_run()
     drafts = [{**c, "status": run.status_of(c, tr.statuses)} for c in tr.prompts]
+    _attach_counts(drafts)
     # The voice line on the Tweets tab. A count of tweet files is one directory listing —
     # cheap enough to poll — and it is the same count the profile was stamped with.
     try:
@@ -459,7 +478,10 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == "/api/tweet":
                 with _lock:
                     st = body["status"]
-                    if st == "posted":
+                    if st == "stats":
+                        tweetrun.stats(body.get("n"), likes=body.get("likes"),
+                                       retweets=body.get("retweets"))
+                    elif st == "posted":
                         tweetrun.post(int(body["n"]), body.get("id"), text=body.get("text"),
                                       title=body.get("title"))
                     else:

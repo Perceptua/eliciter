@@ -176,7 +176,14 @@ When one goes out, **Posted this →** with the post's link or id (or
 the text into `tweets/<date>-<id>.md`, where it becomes source material and voice evidence.
 The id is required: it names the file the same way the archive import does, so a later
 import never duplicates it. A draft marked posted before ids were required can be given one
-with the same command. **✗ Not this
+with the same command.
+
+**Likes and retweets.** When the user reports counts ("it has 3 likes"), record them:
+`bash scripts/tweets.sh stats <n|id|link> --likes 3 --retweets 0`, or **Stats…** on the
+posted card. It takes a posted draft's number, or any posted tweet's id or link, imported
+ones included, and changes only those two counts. Archive downloads are infrequent, so this
+is how "What lands" stays current between them; the next import replaces the counts with
+X's own. **✗ Not this
 one** marks it rejected. `bash scripts/tweets.sh show` lists drafts and recent topics.
 
 **Revising a draft** that has not gone out: `bash scripts/tweets.sh revise <n> --text "…"`
