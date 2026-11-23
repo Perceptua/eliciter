@@ -86,10 +86,11 @@ not predictable by the wrapper.
   pre-filled with the text, and a field for the post's link or X id (required); saving
   marks it posted and writes what was actually sent into `tweets/<date>-<id>.md` — the same
   name an archive import would give it — where it becomes source material and voice
-  evidence. Open drafts also sit in `tweets/drafts/` until they go out. **✗ Not this one** and
+  evidence. A posted card shows its likes and retweets; **Stats…** records them as they
+  stand on X, so they need not wait for the next archive. Open drafts also sit in `tweets/drafts/` until they go out. **✗ Not this one** and
   **↺ Back on offer** work as on Prompts. The run bar shows when the voice profile was
   built, flags it **stale** when tweets have changed since, and opens `state/voice.md`.
-  The CLI twin is `scripts/tweets.sh show|revise|posted|reject|reopen`.
+  The CLI twin is `scripts/tweets.sh show|revise|posted|stats|reject|reopen`.
 - **Queue** — unread papers, with score and the terms that matched. ✓ Read / ✗ Reject.
   Marking one read is also what makes it eligible for a writing prompt.
 - **Search** — ad-hoc arxiv results, with "+ Add to queue".

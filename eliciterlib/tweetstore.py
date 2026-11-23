@@ -10,7 +10,9 @@ writing there are acts *you* take —
     `tweets/drafts/` until it goes out, and
   * marking a draft **posted** on the Tweets tab or with `scripts/tweets.sh posted`, with
     the post's X id, which saves the text you actually posted so the next gather (and the
-    voice profile) sees it.
+    voice profile) sees it, and
+  * reporting a posted tweet's likes and retweets (`scripts/tweets.sh stats`), which
+    rewrites only those two counts, so they need not wait for the next archive.
 
 The folder:
 
@@ -28,7 +30,9 @@ never deletes one, and refuses any name that would land outside the tweets folde
 overwrites only when asked to (`replace=True`), and only the archive import asks: the
 archive is the record of what went out, with the latest likes and retweets, so it
 supersedes a file saved when the tweet was marked posted, or by an earlier import. Marking a
-draft posted never overwrites — an existing file means the tweet is already here. `drafts/` is different: it mirrors the open drafts in `state/tweets.json`, so a
+draft posted never overwrites — an existing file means the tweet is already here.
+Reporting counts (`set_stats`) rewrites a posted tweet's likes and retweets and nothing
+else. `drafts/` is different: it mirrors the open drafts in `state/tweets.json`, so a
 revision rewrites a draft file and posting or rejecting removes it. Only files named
 `*-draft-<n>.md` are touched there; anything else you put in `drafts/` is left alone. The
 readers (`tweets.py`) list only the top level, so drafts and archives are never mistaken
@@ -161,6 +165,65 @@ def save(text, date=None, id=None, url=None, likes=None, retweets=None, root=Non
     os.replace(tmp, path)
     os.utime(path, (ts, ts))
     return path, "created"
+
+
+def find(id, root=None):
+    """The file of posted tweet `id` (`*-<id>.md` at the top level), or None."""
+    folder = _folder(root)
+    suffix = f"-{_SAFE.sub('', str(id))}.md"
+    for name in sorted(os.listdir(folder)):
+        if name.endswith(suffix) and os.path.isfile(os.path.join(folder, name)):
+            return os.path.join(folder, name)
+    return None
+
+
+def set_stats(id, likes=None, retweets=None, root=None):
+    """Record a posted tweet's likes and/or retweets as you report them, between archive
+    imports. Returns `(path, outcome)`, outcome "updated" or "unchanged".
+
+    Only the two counts change; the text, date, id and url are kept as they are. A count
+    left as None keeps its current value. The next archive import replaces the file as
+    usual, with whatever X counted by then."""
+    from .tweets import parse                     # pure text → fields; reads nothing
+    counts = {}
+    for k, v in (("likes", likes), ("retweets", retweets)):
+        if v is None:
+            continue
+        try:
+            v = int(v)
+        except (TypeError, ValueError):
+            raise TweetStoreError(f"{k} must be a whole number, not {v!r}") from None
+        if v < 0:
+            raise TweetStoreError(f"{k} cannot be negative")
+        counts[k] = v
+    if not counts:
+        raise TweetStoreError("give --likes and/or --retweets")
+    path = find(id, root)
+    if path is None:
+        raise TweetStoreError(f"no posted tweet {id} in {_folder(root)} — mark it posted "
+                              "first (`tweets.sh posted <n> --id …`), or import the archive")
+    with open(path, encoding="utf-8") as fh:
+        raw = fh.read()
+    meta, text = parse(raw)
+    try:
+        date = datetime.fromisoformat(meta.get("date", "").replace("Z", "+00:00"))
+    except ValueError:
+        date = id_date(id)
+    if date is None:
+        raise TweetStoreError(f"{os.path.basename(path)} has no date")
+    if date.tzinfo is None:
+        date = date.replace(tzinfo=timezone.utc)
+    fields = {"likes": meta.get("likes"), "retweets": meta.get("retweets"), **counts}
+    body = render(text, date, id=meta.get("id") or id, url=meta.get("url"), **fields)
+    if body == raw:
+        return path, "unchanged"
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(body)
+    os.replace(tmp, path)
+    ts = date.timestamp()
+    os.utime(path, (ts, ts))
+    return path, "updated"
 
 
 # --- drafts/ ---------------------------------------------------------------------------

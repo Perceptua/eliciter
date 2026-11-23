@@ -95,7 +95,9 @@ If a user asks eliciter to save a note for them, the answer is to run
 `eliciterlib/tweetstore.py` is the only code that writes into `tweets/`, and only for acts
 the user takes: importing their X archive (`scripts/import-tweets.sh`), finalizing a tweet
 in a session (mirrored to `tweets/drafts/`), and marking a drafted tweet **posted** (Tweets
-tab or `scripts/tweets.sh posted --id`), which saves what they actually posted. A posted
+tab or `scripts/tweets.sh posted --id`), which saves what they actually posted, and
+reporting a posted tweet's likes and retweets (`scripts/tweets.sh stats`, `set_stats`),
+which rewrites those two counts and nothing else. A posted
 tweet is one file named `<date>-<id>.md`; it is never deleted, a path outside the folder
 is refused, and only the archive import overwrites one (`save(replace=True)`), because the
 archive is the authoritative record of the tweet with the latest likes and retweets. `tweets/drafts/` is the one place it rewrites and removes,

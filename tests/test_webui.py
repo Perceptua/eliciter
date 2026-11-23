@@ -195,6 +195,16 @@ class TestRoutes(unittest.TestCase):
                                  ("posted", "one!", "1990486787850289209"))
                 self.assertEqual(tops(), [card["posted_file"]])
                 self.assertTrue(card["posted_file"].endswith("-1990486787850289209.md"))
+                self.assertEqual((card.get("likes"), card.get("retweets")), (None, None))
+                code, body = self.post("/api/tweet", {"n": 1, "status": "stats",
+                                                      "likes": 3, "retweets": 0})
+                self.assertEqual(code, 200, body[:300])
+                card = json.loads(body)["tweets"][0]
+                self.assertEqual((card["likes"], card["retweets"]), (3, 0))
+                self.assertEqual(self.post("/api/tweet", {"n": 1, "status": "stats",
+                                                          "likes": -2})[0], 400)
+                self.assertEqual(self.post("/api/tweet", {"n": 1, "status": "stats"})[0], 400)
+                self.assertEqual(tops(), [card["posted_file"]])
                 self.assertEqual(self.post("/api/tweet", {"n": 1, "status": "open",
                                                           "title": "A"})[0], 200)
                 self.assertEqual(self.post("/api/tweet", {"n": 1, "status": "written"})[0], 400)

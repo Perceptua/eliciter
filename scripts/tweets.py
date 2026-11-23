@@ -8,6 +8,7 @@
   scripts/tweets.sh revise 3 --title "…"       # …or its topic label
   scripts/tweets.sh posted 3 --id <id|link>   # it went out as drafted — saved to tweets/
   scripts/tweets.sh posted 3 --id … --text "…" # …or what went out, if you changed it
+  scripts/tweets.sh stats 3 --likes 12 --retweets 1  # its counts so far (draft n, id or link)
   scripts/tweets.sh reject 3                   # not posting it after all
   scripts/tweets.sh reopen 3                   # undo either
   scripts/tweets.sh voice-check                # validate state/voice.next.md; write nothing
@@ -28,6 +29,11 @@ X id (or its link) and saves the text into `tweets/` as `YYYY-MM-DD-<id>.md` —
 name an archive import gives it — so what you posted becomes source material, and voice
 evidence, on the next gather. A draft posted before ids were required can be given its id
 the same way.
+
+`stats` records a posted tweet's likes and retweets as you report them, so the voice
+profile's "What lands" need not wait for the next archive. It takes a posted draft's number
+or any posted tweet's id or link, and changes only those two counts. The next archive
+import replaces them with whatever X counted by then.
 """
 import argparse
 import os
@@ -50,8 +56,10 @@ def main():
     p = argparse.ArgumentParser(prog="tweets", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("action", nargs="?", default="show",
-                   choices=("show", "draft", "topic", "revise", *DECIDE, "voice-check", "voice-save"))
-    p.add_argument("n", nargs="?", type=int, help="which draft, for revise/posted/reject/reopen")
+                   choices=("show", "draft", "topic", "revise", "stats", *DECIDE,
+                            "voice-check", "voice-save"))
+    p.add_argument("n", nargs="?", help="which draft, for revise/posted/reject/reopen; "
+                   "for stats, a posted draft's number or a tweet's id or link")
     p.add_argument("--title", help="the topic, as a short label")
     p.add_argument("--source", action="append", default=[], help="<source>:<ref>[|title]")
     p.add_argument("--text", help="the tweet (draft), its new text (revise), or what went out (posted)")
@@ -59,7 +67,14 @@ def main():
     p.add_argument("--because", default="", help="draft: why the topic was live")
     p.add_argument("--outcome", choices=tweetrun.TOPIC_OUTCOMES, help="topic: what became of it")
     p.add_argument("--note", default="", help="topic: why you passed, in a few words")
+    p.add_argument("--likes", type=int, help="stats: how many likes it has")
+    p.add_argument("--retweets", type=int, help="stats: how many retweets it has")
     a = p.parse_args()
+    if a.n is not None and a.action != "stats":
+        try:
+            a.n = int(a.n)
+        except ValueError:
+            p.error(f"{a.action} takes a draft number, not {a.n!r}")
 
     try:
         if a.action in ("voice-check", "voice-save"):
@@ -87,6 +102,17 @@ def main():
             e = tweetrun.log_topic(a.title, tweetrun.parse_sources(a.source), a.outcome,
                                    note=a.note)
             print(f"[tweets] topic logged: {e['title']} — {e['outcome']}")
+            return 0
+
+        if a.action == "stats":
+            ref = a.n if a.n is not None else a.id
+            if not ref:
+                raise SystemExit("which tweet? e.g. `bash scripts/tweets.sh stats 3 --likes 12` "
+                                 "or `… stats https://x.com/you/status/1857… --likes 12`")
+            path, outcome = tweetrun.stats(ref, likes=a.likes, retweets=a.retweets)
+            meta = tweets.parse(open(path, encoding="utf-8").read())[0]
+            print(f"[tweets] {os.path.basename(path)} — {meta['likes']} likes, "
+                  f"{meta['retweets']} retweets" + ("" if outcome == "updated" else " (no change)"))
             return 0
 
         if a.action == "revise":

@@ -424,6 +424,35 @@ class TestPost(Tmp):
         tweetrun.post(1, ID, r=self.r())
         self.assertEqual(tweets.load(self.root)[0]["text"], "one")
 
+    def test_stats_by_draft_or_id_change_only_the_counts(self):
+        with self.assertRaises(tweetrun.InvalidTweets):          # not posted yet
+            tweetrun.stats(1, likes=3, r=self.r())
+        with self.assertRaises(KeyError):
+            tweetrun.stats(9, likes=3, r=self.r())
+        tweetrun.post(1, ID, r=self.r())
+        [before] = tweets.load(self.root)
+
+        _, outcome = tweetrun.stats(1, likes=3, r=self.r())
+        self.assertEqual(outcome, "updated")
+        [t] = tweets.load(self.root)
+        self.assertEqual((t["likes"], t["retweets"]), (3, None))
+        for k in ("file", "text", "id", "url", "date"):
+            self.assertEqual(t[k], before[k], k)
+
+        tweetrun.stats(f"https://x.com/me/status/{ID}", retweets=1)  # by link; likes kept
+        [t] = tweets.load(self.root)
+        self.assertEqual((t["likes"], t["retweets"]), (3, 1))
+        self.assertEqual(tweetrun.stats(ID, likes=3)[1], "unchanged")
+
+        for kw in ({}, {"likes": -1}, {"likes": "many"}):
+            with self.assertRaises(tweetrun.InvalidTweets, msg=kw):
+                tweetrun.stats(ID, **kw)
+        with self.assertRaises(tweetrun.InvalidTweets):          # no such tweet
+            tweetrun.stats("1999999999999999999", likes=1)
+        with self.assertRaises(tweetrun.InvalidTweets):
+            tweetrun.stats("not an id", likes=1)
+        self.assertEqual(len(self.top()), 1)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
