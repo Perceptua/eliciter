@@ -3,7 +3,7 @@
 Reads what you've been reading, and asks you to write.
 
 It replaces the weekly Claude Desktop arxiv task with a local sweep, keeps a **reading
-queue** of at most three papers whose status you control, and turns that queue — together
+queue** of a few papers (`ELICITER_ARXIV_KEEP`, default 3) whose status you control, and turns that queue — together
 with your indexia notes, perceptua posts, misc dropped writing, your tweets, and audua run
 recordings — into numbered writing prompts. **A script gathers; a Claude session judges.** Ask for
 prompts and everything the sources have to say is collected into one file, then read and
@@ -35,6 +35,7 @@ make write     # list prompts; then scripts/write.sh <n>
 make tweets    # your finalized tweet drafts, and the topics pitched lately
 make import-tweets  # newest X archive in tweets/archives/ → tweets/  (or ARCHIVE=path)
 make books     # your reading list outside arxiv, newest read first
+make interests # the interest profile: categories, interests, excludes, last tuned
 make test      # the read-only gate, and every route still answers
 ```
 
@@ -101,11 +102,11 @@ else, and `make test` scans `webui.py` to prove it.
 
 ---
 
-## The six operations
+## The seven operations
 
 ### 1. Replace the weekly arxiv digest, and read the whole week
 
-`scripts/sweep.sh fetch` pulls everything submitted to the configured categories over the
+`scripts/sweep.sh fetch` pulls everything submitted to the profile's categories over the
 lookback window — **on a real week, 1160 papers** — and writes them to
 `state/candidates.json`. Then a session reads them and chooses. No GPU, works with the
 indexia container down, about ninety seconds of network.
@@ -118,7 +119,7 @@ exists.
 interest profile, anything matching no *stated* interest was dropped, and the top ten were
 queued. Measured on one week: 1160 swept, **642 dropped without a human seeing a word**, and
 the survivors were mostly LLM-agent papers, because `agent` is the heaviest term in the
-profile and cs.AI says it constantly. `ELICITER_EXCLUDE` was an arms race against that, and
+profile and cs.AI says it constantly. The exclude list was an arms race against that, and
 it was being lost slowly. Two different failures — one of recall, one of precision — and
 neither is fixable by tuning a bag of words.
 
@@ -147,10 +148,10 @@ four hundred — shown in bold on its card in the Queue tab (and under it in `pa
 underneath as provenance. Before, the score *was* the reason, which is what made the queue
 hard to trust.
 
-### 2. At most three papers, with status you control
+### 2. A capped queue, with status you control
 
 The reading queue is not a fresh list each week. It is a **queue that persists**, capped at
-`ELICITER_ARXIV_KEEP` (3), and a sweep tops it up rather than replacing it.
+`ELICITER_ARXIV_KEEP` (default 3; your `.env` may set another), and a sweep tops it up rather than replacing it.
 
 | status | meaning |
 |---|---|
@@ -503,19 +504,33 @@ pass over this one, not as the only pass.
 score = Σ weight(matched terms) / √(distinct terms in abstract) − 2.0 × (excluded terms)
 ```
 
-**`ELICITER_INTERESTS`** (weight 3.0) — a paper must match **at least one** to score at all.
+**Interests** (weight 3.0) — a paper must match **at least one** to score at all.
 Corpus words alone are not enough: every ML abstract shares vocabulary with any corpus about
 learning agents, and without this gate the first run put an agent-payments security paper
 and a histology model in the top five. Note terms (weight 0.4) only break ties among papers
 already relevant.
 
-**`ELICITER_EXCLUDE`** — the counterweight. Bag-of-words cannot tell your sense of a word
+**Exclude** — the counterweight. Bag-of-words cannot tell your sense of a word
 from the field's: *agents* means Levin's cells to you and LLM tool-callers to most of cs.AI
 in 2026. Each excluded term costs points, so a passing mention survives and a paper *about*
 the thing sinks. This moved "SWE Refactor Bench" from 8th to last without touching the top.
 
-Tune by reading the matched terms on the Queue tab; `--explain` prints the whole
-profile, marking which terms are gates.
+**Multi-word terms match as phrases**: `collective intelligence` scores only where those
+words run together (stopwords between them are ignored, so `philosophy of time` matches
+"the philosophy of time"). Until 2026-11-24 the ranker split phrases into words, and the
+first tuning measured what that cost — `active inference` lifted every abstract saying
+`inference`, 193 of a 1462-paper week, none of them read.
+
+Both lists, and the arxiv categories a sweep pulls from, live in `state/interests.json`, the
+**interest profile**, and are tuned in a
+session by the `tune-interests` skill: `scripts/interests.sh gather` collects the papers you
+read and rejected (with which profile terms caught each) plus your recent writing, the
+session proposes terms to add and drop with a reason for each, and nothing is saved until
+you approve it — `scripts/interests.sh save` then applies it and keeps the change, with its
+reasons, in the profile's history. They are not `.env` settings: until a profile exists the
+sweep uses built-in defaults (`config.DEFAULT_INTERESTS`, `DEFAULT_EXCLUDE`, `DEFAULT_CATEGORIES`), and
+`scripts/interests.sh init` seeds the profile from those. `sweep.sh explain` prints the whole term profile, marking which
+terms are stated.
 
 ---
 
@@ -526,25 +541,31 @@ read from `indexia/docker/.env` at run time, so rotating it there is enough.
 
 | Setting | Default | |
 |---|---|---|
-| `ELICITER_INTERESTS` | Levin-adjacent agency terms | the main dial; also the relevance gate |
-| `ELICITER_EXCLUDE` | `benchmark, refactor, payment, …` | seeded from real noise; tune it |
+| `ELICITER_INDEXIA_ROOT` | `~/indexia` | the graph; its `docker/.env` supplies the password |
+| `ELICITER_PERCEPTUA_POSTS` | `~/perceptua/_posts` | |
+| `ELICITER_AUDUA_ROOT` | `~/audua/processing/output` | sessions count while within 30 days |
+| `ELICITER_MISC_DIR` | `misc/` | dropped and scanned writing; gitignored |
 | `ELICITER_ARXIV_KEEP` | `3` | queue cap |
-| `ELICITER_ARXIV_CATEGORIES` | `cs.AI, cs.LG, cs.NE, q-bio.NC, nlin.AO` | |
 | `ELICITER_ARXIV_LOOKBACK_DAYS` | `7` | |
-| `ELICITER_ARXIV_MAX_RESULTS` | `300` | see below |
+| `ELICITER_ARXIV_MAX_RESULTS` | `300` | papers per sweep, all categories together; see below |
+| `ELICITER_ARXIV_DELAY` | `3.0` | seconds between arxiv requests; do not lower |
 | `ELICITER_TWEETS_DIR` | `tweets/` | your tweets, one `.md` each; gitignored |
 | `ELICITER_BOOKS_DIR` | `books/` | your reading list, one `.md` per book; gitignored |
-| `ELICITER_UI_PORT` | `8473` | loopback only; 8420 is indexia's UI |
+| `ELICITER_UI_PORT` | `8473` | loopback unless `--tailscale`; 8420 is indexia's UI |
+
+`ELICITER_PYTHON` (default `python3`), `ELICITER_RUN_DIR` (`~/.eliciter`, the UI's pid file)
+and `ELICITER_UI_LOG` (`$ELICITER_RUN_DIR/ui.log`) are read by the bash wrappers from your
+shell environment, not from `.env`, so export them there if you need them. The arxiv
+categories and the interest and exclude lists are not settings at all; they live in
+`state/interests.json`.
 
 ### Known limits
 
-- **The sweep cap binds.** 300 papers over 7 days across 5 categories is under the real
-  volume — cs.LG alone runs to several hundred a week. Results arrive newest-first, so a 300
+- **The sweep cap binds.** 300 papers over 7 days is under the real volume of any profile
+  with a large category in it — quant-ph runs to a few hundred a week, and cs.LG did before
+  it was dropped. Results arrive newest-first, so a 300
   cap samples the most recent day or two rather than the week. Raise
   `ELICITER_ARXIV_MAX_RESULTS`; it costs one request and 3s of politeness delay per 100.
-- **A tiny corpus limits the graph moves.** With 4 notes and no ratified binds, moves 5–7
-  are structurally silent (move 7 needs 3+ descendants; move 5 needs a ratified `inhibits`).
-  Wired and tested; they fire as the corpus grows.
 - **Queue positions move.** They are positions in the *unread* list, so they shift as you
   mark things. Ids are stable; prefer them in anything you write down.
 
@@ -567,6 +588,7 @@ eliciterlib/
   tweets.py    tweets adapter: one .md per tweet, read in full
   tweetstore.py  the one writer into tweets/ (import, "posted", drafts/)
   voice.py     the voice profile: staleness, the rebuild check, the stamp
+  interests.py the interest profile: load, seed, check and apply a tuning, gather evidence
   tweetrun.py  save a finalized tweet as a draft; log a pitched topic; posting
   books.py     books adapter: your reading list, newest read first, a page at a time
   bookstore.py the one writer into books/ (add, update, clear the samples)
@@ -578,10 +600,10 @@ eliciterlib/
 scripts/
   doctor.sh  test.sh  papers.sh  ui.sh
   gather.sh  prompts.sh  write.sh  sweep.sh
-  tweets.sh  import-tweets.sh  books.sh
+  tweets.sh  import-tweets.sh  books.sh  interests.sh
 .claude/skills/
   reading-queue  elicit-writing  elicit-tweets  read-only-sources  eliciter-ui  scan-misc
-  reading-list
+  reading-list  tune-interests
 ```
 
 Sources emit signals and know nothing about writing; `material.py` serializes them and makes

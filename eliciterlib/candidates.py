@@ -15,7 +15,7 @@ human read a word of any of them.
 
 The ranking is a precision problem, and worse. Bag-of-words cannot tell your sense of
 `agent` from cs.AI's, so the top ten that week mixed papers that were genuinely about
-collective behaviour with an LLM tool-calling framework. `ELICITER_EXCLUDE` exists to push
+collective behaviour with an LLM tool-calling framework. The exclude list exists to push
 back on exactly that and it is an arms race you lose slowly.
 
 Both dissolve if a reader is the second stage, so the funnel is now:

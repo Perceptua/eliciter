@@ -9,7 +9,7 @@ generalized from a four-note corpus, which is not enough to generalize from. The
 certain and the benefit was speculative, so it went.
 
 What replaced it is better in two ways beyond being instant. The profile is **explicit**
-(`ELICITER_INTERESTS`), so you can state an interest before you have written a note about
+(the stated interests in `state/interests.json`), so you can state an interest before you have written a note about
 it — a cold-start the corpus-similarity version could not do at all. And the score is
 **legible**: the queue can name the terms that matched, which says why a paper surfaced
 far more usefully than a cosine number.
@@ -70,11 +70,39 @@ def terms(text):
     return [w for w in WORD_RE.findall((text or "").lower()) if w not in STOPWORDS]
 
 
+def phrase(term):
+    """A stated term as the ranker keys it: its words, stopwords dropped, joined by a space.
+    `philosophy of time` → `philosophy time`; `agency` → `agency`."""
+    return " ".join(terms(term))
+
+
+def features(text, max_n=1):
+    """→ (every word and every run of up to `max_n` consecutive words in `text`, the number
+    of distinct words). Runs are taken after stopwords are dropped, which is what lets
+    `philosophy of time` match an abstract saying "the philosophy of time" — and, the
+    accepted price, "philosophy and time" too."""
+    toks = terms(text)
+    seen = set(toks)
+    for n in range(2, max_n + 1):
+        seen.update(" ".join(toks[i:i + n]) for i in range(len(toks) - n + 1))
+    return seen, len(set(toks))
+
+
+def contains(text, term):
+    """True if `term` occurs in `text` the way the ranker would match it: a single word
+    as that exact word, a phrase as those words consecutively."""
+    key = phrase(term)
+    if not key:
+        return False
+    seen, _ = features(text, max_n=key.count(" ") + 1)
+    return key in seen
+
+
 def profile(notes=(), interests=(), exclude=()):
     """Build term → weight from what you care about: stated interests, plus your notes.
 
     Two inputs, deliberately unequal:
-      * `interests` — stated outright in `.env`. Fixed weight, and works from cold.
+      * `interests` — stated outright in `state/interests.json`. Fixed weight, and works from cold.
       * `notes`     — indexia note titles and bodies, weighted `log(1 + occurrences)` so a
                       word used constantly does not swamp one used precisely.
 
@@ -84,15 +112,20 @@ def profile(notes=(), interests=(), exclude=()):
     source earns its own prompts elsewhere; what it does not get to do is decide which
     papers are interesting.
 
-    Multi-word interests ("collective intelligence") contribute their words individually,
-    since scoring is bag-of-words. That slightly over-credits a paper matching only half a
-    phrase, which is the acceptable direction to be wrong in for a shortlist.
+    **A multi-word interest or exclusion is matched as a phrase** ("collective
+    intelligence" only where those words run together), not word by word. Until 2026-11-24
+    phrases were split, and it was measured to be the profile's worst noise source:
+    `active inference` lifted every abstract saying `inference` (193 of a 1462-paper week,
+    none read), `philosophy of time` every one saying `time` (224), and an exclusion of
+    `code generation` sank every one saying `generation`. Note words stay single words —
+    they are the corpus's vocabulary, not phrases anyone stated.
     """
     weights, stated = {}, set()
-    for phrase in interests:
-        for w in terms(phrase):
-            weights[w] = weights.get(w, 0.0) + INTEREST_WEIGHT
-            stated.add(w)
+    for term in interests:
+        key = phrase(term)
+        if key:
+            weights[key] = weights.get(key, 0.0) + INTEREST_WEIGHT
+            stated.add(key)
 
     tf = {}
     for n in notes:
@@ -101,7 +134,7 @@ def profile(notes=(), interests=(), exclude=()):
     for w, c in tf.items():
         weights[w] = weights.get(w, 0.0) + CORPUS_WEIGHT * math.log(1 + c)
 
-    banned = {w for phrase in exclude for w in terms(phrase)}
+    banned = {key for key in map(phrase, exclude) if key}
     # An exclusion always wins: if a word is both stated and excluded, the exclusion is the
     # more specific, more recent instruction, and silently ignoring it would be baffling.
     for w in banned:
@@ -121,6 +154,8 @@ class Profile:
         self.weights = weights
         self.stated = stated
         self.banned = banned
+        # The longest phrase anything is keyed on, so `features` builds no longer runs.
+        self.max_n = max((k.count(" ") + 1 for k in (*weights, *banned)), default=1)
 
     def __len__(self):
         return len(self.weights)
@@ -147,7 +182,7 @@ def overlap(text, prof):
     paper keeps a score, nothing is dropped, and the score is a hint about where to look
     first rather than a verdict about what exists.
     """
-    seen = set(terms(text))
+    seen, n_words = features(text, prof.max_n if prof else 1)
     if not seen or not prof:
         return 0.0, []
     matched = sorted((w for w in seen if w in prof.weights), key=lambda w: -prof.weights[w])
@@ -158,7 +193,7 @@ def overlap(text, prof):
     # Exclusions can drive this negative, and a negative is meaningful here where it was
     # not before: it says the paper is *about* something you ruled out. Kept rather than
     # zeroed so the ordering puts it below a paper that merely matched nothing.
-    return total / math.sqrt(len(seen)), matched
+    return total / math.sqrt(n_words), matched
 
 
 def score(text, prof):
@@ -167,16 +202,17 @@ def score(text, prof):
     **A paper must match at least one stated interest to score at all.** Matching only
     corpus vocabulary is not enough, because every ML abstract shares vocabulary with any
     corpus about learning agents — that is what made the first version return a payments
-    protocol paper. The gate is what `ELICITER_INTERESTS` is *for*; the corpus terms then
+    protocol paper. The gate is what the stated interests are *for*; the corpus terms then
     order what got through.
 
-    Distinct terms only — an abstract saying "agent" thirty times is not thirty times more
+    Stated phrases match as phrases (see `profile`). Distinct terms only — an abstract
+    saying "agent" thirty times is not thirty times more
     relevant — and normalized by the square root of its own vocabulary size, so a long
     abstract cannot out-score a short one on sheer volume. The square root rather than the
     length itself: dividing by the full count over-punishes long abstracts, which is how
     survey papers, often exactly what you want, get buried.
     """
-    seen = set(terms(text))
+    seen, n_words = features(text, prof.max_n if prof else 1)
     if not seen or not prof:
         return 0.0, []
     matched = sorted((w for w in seen if w in prof.weights), key=lambda w: -prof.weights[w])
@@ -186,4 +222,4 @@ def score(text, prof):
     total -= EXCLUDE_WEIGHT * len(seen & prof.banned)
     if total <= 0.0:
         return 0.0, []
-    return total / math.sqrt(len(seen)), matched
+    return total / math.sqrt(n_words), matched

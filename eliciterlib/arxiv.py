@@ -234,8 +234,8 @@ def search(query, max_results=25, log=print):
 def build_profile(db=None, log=print):
     """The interest profile a sweep is scored against: stated interests + your corpus.
 
-    Assembled here rather than in `score` so a caller can inspect it — `--explain` prints
-    it, which is the difference between tuning `ELICITER_INTERESTS` deliberately and
+    Assembled here rather than in `score` so a caller can inspect it — `sweep.sh explain` prints
+    it, which is the difference between tuning the interest profile deliberately and
     guessing at it.
     """
     notes = []

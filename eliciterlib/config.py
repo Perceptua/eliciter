@@ -27,17 +27,10 @@ DEFAULTS = {
     "ELICITER_TWEETS_DIR": os.path.join(ROOT, "tweets"),
     "ELICITER_BOOKS_DIR": os.path.join(ROOT, "books"),
     "ELICITER_AUDUA_ROOT": "/home/aphorikles/audua/processing/output",
-    "ELICITER_ARXIV_CATEGORIES": "cs.AI,cs.LG,cs.NE,q-bio.NC,nlin.AO",
     "ELICITER_ARXIV_LOOKBACK_DAYS": "7",
     "ELICITER_ARXIV_MAX_RESULTS": "300",
     "ELICITER_ARXIV_DELAY": "3.0",
     "ELICITER_ARXIV_KEEP": "3",
-    "ELICITER_INTERESTS": (
-        "agency, agents, goal-directed behaviour, collective intelligence, basal cognition, "
-        "morphogenesis, causal emergence, alignment, learnable novelty, autopoiesis, "
-        "self-organization, active inference, developmental biology, cognitive boundaries"),
-    "ELICITER_EXCLUDE": ("benchmark, leaderboard, refactor, payment, vulnerability, "
-                         "malware, software engineering, code generation"),
     # 8473 deliberately: 8420 is indexia's UI, and 8080/8765 are asked to stay free.
     "ELICITER_UI_PORT": "8473",
 }
@@ -107,6 +100,19 @@ def bootstrap():
 # Read after bootstrap(). Each coerces once, so a bad value fails at startup with
 # the name of the setting rather than deep inside a scoring loop.
 
+# The interest profile's starting point, used only until `state/interests.json` exists
+# (`scripts/interests.sh init` seeds the profile from these). Not settings: the profile is
+# the one place these lists are tuned, so there is no .env variable to override them.
+DEFAULT_INTERESTS = [
+    "agency", "agents", "goal-directed behaviour", "collective intelligence",
+    "basal cognition", "morphogenesis", "causal emergence", "alignment",
+    "learnable novelty", "autopoiesis", "self-organization", "active inference",
+    "developmental biology", "cognitive boundaries"]
+DEFAULT_EXCLUDE = ["benchmark", "leaderboard", "refactor", "payment", "vulnerability",
+                   "malware", "software engineering", "code generation"]
+DEFAULT_CATEGORIES = ["cs.AI", "cs.LG", "cs.NE", "q-bio.NC", "nlin.AO"]
+
+
 def _num(name, cast):
     raw = os.environ.get(name, DEFAULTS.get(name, ""))
     try:
@@ -128,16 +134,29 @@ def f(name):
 
 
 def categories():
-    return [c.strip() for c in s("ELICITER_ARXIV_CATEGORIES").split(",") if c.strip()]
+    """The arxiv categories a sweep pulls from. In `state/interests.json` with the other
+    lists, and tuned the same way; `DEFAULT_CATEGORIES` until the profile exists."""
+    got = _profile_list("categories")
+    return got if got is not None else list(DEFAULT_CATEGORIES)
+
+
+def _profile_list(name):
+    """One list from `state/interests.json`, or None when there is no profile yet."""
+    from . import interests as profile        # lazy: that module imports this one
+    data = profile.load()
+    return list(data[name]) if data is not None else None
 
 
 def interests():
     """What you have said you care about, independent of what you have written about.
 
     This is the one knob worth revisiting regularly: it is how a sweep learns about an
-    interest before the corpus has a note on it.
+    interest before the corpus has a note on it. It lives in `state/interests.json` and is
+    tuned by the `tune-interests` skill; `DEFAULT_INTERESTS` stands in for a checkout with
+    no profile yet.
     """
-    return [t.strip() for t in s("ELICITER_INTERESTS").split(",") if t.strip()]
+    got = _profile_list("interests")
+    return got if got is not None else list(DEFAULT_INTERESTS)
 
 
 def exclude():
@@ -145,9 +164,11 @@ def exclude():
 
     Needed because bag-of-words has no way to tell your sense of a word from the field's:
     `agents` means Levin's cells to you and LLM tool-callers to most of cs.AI in 2026, and
-    the sweep cannot separate them without being told.
+    the sweep cannot separate them without being told. Same home as `interests()`:
+    `state/interests.json`, with `DEFAULT_EXCLUDE` until it exists.
     """
-    return [t.strip() for t in s("ELICITER_EXCLUDE").split(",") if t.strip()]
+    got = _profile_list("exclude")
+    return got if got is not None else list(DEFAULT_EXCLUDE)
 
 
 def posts_dir():

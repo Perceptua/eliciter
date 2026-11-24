@@ -34,7 +34,7 @@ def _db_or_none(log):
     """The gated graph if it is up, None if it is not.
 
     A sweep must not require the database. The corpus only enriches the interest profile;
-    `ELICITER_INTERESTS` alone is enough to order a week of papers, so a stopped container
+    the interest profile alone is enough to order a week of papers, so a stopped container
     should cost some ordering quality, not the whole sweep.
     """
     try:
@@ -54,7 +54,7 @@ def cmd_fetch(a, log):
                             lookback_days=a.lookback, log=log)
     dest = candidates.write(data, log=log)
     print(f"[sweep] {len(data['candidates'])} candidate(s) from {data['swept']} swept; "
-          f"{data['free_slots']} free slot(s) in the queue\n"
+          f"{data['free_slots']} free slot(s) in the queue (cap {data['queue_cap']})\n"
           f"  {dest}\n"
           f"  now: scripts/sweep.sh titles")
     return 0
@@ -64,7 +64,7 @@ def cmd_titles(a, log):
     data = candidates.load()
     lines = candidates.title_lines(data, per_group=a.top)
     print(f"# {len(data['candidates'])} candidate(s) · swept {data['swept']} over "
-          f"{data['lookback_days']}d · {data['free_slots']} free queue slot(s)")
+          f"{data['lookback_days']}d · {data['free_slots']} free queue slot(s) of cap {data.get('queue_cap', '?')}")
     print("# Grouped by primary category, smallest group first — the small ones are the")
     print("# specialised venues and are worth reading in full; cs.AI and cs.LG are the")
     print("# firehose. Score is term overlap: it orders, it does not filter. Nothing here")
@@ -92,7 +92,7 @@ def cmd_explain(a, log):
         print(f" {mark}{wt:5.2f}  {w}")
     if prof.banned:
         print(f"\nexcluded: {', '.join(sorted(prof.banned))}")
-    print("\n* = stated in ELICITER_INTERESTS. These weight the ordering of the candidate")
+    print("\n* = stated in the interest profile (state/interests.json). These weight the ordering of the candidate")
     print("  list; since 2026-08-30 they no longer decide what reaches it.")
     return 0
 
