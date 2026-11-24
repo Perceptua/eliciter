@@ -6,9 +6,12 @@ description: Sweep arxiv and choose the week's best papers for the user's readin
 # The reading queue
 
 eliciter replaces the old weekly Claude Desktop arxiv task. A sweep pulls the week — **on a
-real week, about 1160 papers** — and a persistent queue capped at `ELICITER_ARXIV_KEEP` (3)
-holds what is worth reading. The queue is the point: a paper waits there until the user says
-what became of it.
+real week, about 1160 papers** — and a persistent queue capped at `ELICITER_ARXIV_KEEP`
+holds what is worth reading. **Never quote the cap from memory or from these docs** — the
+default is 3, but the user's `.env` overrides it. Quote the number the scripts print:
+`sweep.sh fetch`, `titles` and `accept` all print the cap, and `state/candidates.json` has
+`queue_cap`. The queue is the point: a paper waits there until the user says what became
+of it.
 
     unread    waiting; this is what the Queue tab shows — what to read next
     read      they read it — leaves the queue, and this is what prompts are generated from
@@ -23,7 +26,7 @@ something to write about, since the claim a note wants only exists after the rea
 the interest profile, drop anything matching no stated interest, and queue the top ten.
 Measured on one real week: 1160 swept, **642 dropped without a human seeing a word of
 them**, and the ten that survived were mostly LLM-agent papers, because `agent` is the
-heaviest term in the profile and cs.AI says it constantly. `ELICITER_EXCLUDE` was an arms
+heaviest term in the profile and cs.AI says it constantly. The exclude list was an arms
 race against that, and it was being lost slowly.
 
 So the funnel is now two passes with you in the middle:
@@ -40,7 +43,7 @@ So the funnel is now two passes with you in the middle:
    `state/candidates.json`. Papers already in the queue, read, or rejected are filtered out
    here, so a rejected paper can never come back.
 2. **`bash scripts/sweep.sh titles`** — read it. All of it.
-   - Grouped by primary category, **your configured categories first, smallest group
+   - Grouped by primary category, **the profile's categories first, smallest group
      first**. That ordering is doing real work: math.HO, physics.hist-ph, q-bio.NC and
      nlin.AO run to three or five papers a week and are where the foundations-of-maths and
      basal-cognition material actually appears. **Read those exhaustively.** cs.AI (≈290)
@@ -128,11 +131,12 @@ rejection is permanent and is what keeps the same off-target paper from returnin
 
 ## Tuning what surfaces
 
-`ELICITER_ARXIV_CATEGORIES` is now the setting that matters most, because it decides both
-what is swept and what leads the grouped list. `ELICITER_INTERESTS` and `ELICITER_EXCLUDE`
+The categories are now what matters most, because they decide both what is swept and what
+leads the grouped list. They live in the interest profile (`state/interests.json`) with the
+interest and exclude terms, and all three are tuned by the `tune-interests` skill. The terms
 still weight the ordering, but **they no longer decide what you get to see**, so a complaint
-about the queue is no longer fixed by editing them — it is fixed by picking better. Treat an
-excluded term as a hint about taste, not an instruction.
+about the queue is fixed by picking better or, if good papers keep arriving only by search,
+by tuning the categories. Treat an excluded term as a hint about taste, not an instruction.
 
 ## Boundaries
 

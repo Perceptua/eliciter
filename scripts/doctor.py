@@ -43,7 +43,7 @@ def c_graph():
     n = notelib.first_row(db.query("SELECT count(*) AS n FROM Note")).get("n", 0)
     if not n:
         return MEH, ("reachable, but the corpus is empty — the graph will produce no "
-                     "prompts and the profile falls back to ELICITER_INTERESTS")
+                     "prompts and the profile is the stated interests alone")
     return OK, f"{os.environ['BASE_URL']} — {n} note(s)"
 
 
@@ -126,7 +126,7 @@ def c_profile():
     from eliciterlib import arxiv
     prof = arxiv.build_profile(None, log=lambda *_: None)
     if not prof:
-        return BAD, "empty — set ELICITER_INTERESTS in .env"
+        return BAD, "empty — seed the profile: scripts/interests.sh init"
     top = ", ".join(w for w, _ in sorted(prof.items(), key=lambda kv: -kv[1])[:5])
     return OK, f"{len(prof)} term(s), {len(prof.stated)} stated; heaviest: {top}"
 

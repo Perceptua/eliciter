@@ -250,7 +250,7 @@
 
 <script>
 const $ = s => document.querySelector(s);
-let S = { papers:{unread:[],read:[],rejected:[],cap:10}, prompts:[], tweets:[], voice:{}, config:{} };
+let S = { papers:{unread:[],read:[],rejected:[],cap:null}, prompts:[], tweets:[], voice:{}, config:{} };
 let searchResults = [], tab = "prompts", busy = false, hideDecided = false;
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c =>
@@ -695,7 +695,7 @@ function paint() {
   } else if (tab === "papers") {
     const u = S.papers.unread;
     v.innerHTML = (u.length
-      ? `<p class="meta" style="margin:0 0 .7rem">${u.length} waiting · cap ${S.papers.cap}</p>`
+      ? `<p class="meta" style="margin:0 0 .7rem">${u.length} waiting${S.papers.cap == null ? "" : ` · cap ${S.papers.cap}`}</p>`
         + u.map(p => paperCard(p, {queue:true})).join("")
       // Which papers are worth queuing is a session's judgement now, over the whole week
       // rather than the top ten by term overlap — so this is instructions, like the

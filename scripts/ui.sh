@@ -5,7 +5,10 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 LOG="${ELICITER_UI_LOG:-$PID_DIR/ui.log}"
-PORT="${ELICITER_UI_PORT:-8473}"
+# The shell does not load .env (only config.py does), so read the port from it here —
+# otherwise a port set there is the one the server binds and not the one this reports.
+PORT="${ELICITER_UI_PORT:-$(sed -n 's/^[[:space:]]*ELICITER_UI_PORT=[[:space:]]*//p' "$ROOT/.env" 2>/dev/null | tail -n1 | tr -d "\"'[:space:]")}"
+PORT="${PORT:-8473}"
 NAME="ui"
 SCRIPT="$ROOT/scripts/ui.py"
 

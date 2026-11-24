@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-.PHONY: help ui ui-up ui-down ui-status ui-restart doctor test sweep queue gather prompts tweets books import-tweets write clean
+.PHONY: help ui ui-up ui-down ui-status ui-restart doctor test sweep queue interests gather prompts tweets books import-tweets write clean
 
 help:              ## show this help
 	@grep -hE '^[a-z-]+:.*?##' $(MAKEFILE_LIST) \
@@ -36,6 +36,9 @@ sweep:             ## sweep arxiv into state/candidates.json (then ask a session
 
 queue:             ## show what is waiting to be read
 	@bash scripts/papers.sh
+
+interests:         ## the interest profile (tune it in a session: the tune-interests skill)
+	@bash scripts/interests.sh
 
 gather:            ## read every source into state/material.json (the skill does this for you)
 	@bash scripts/gather.sh

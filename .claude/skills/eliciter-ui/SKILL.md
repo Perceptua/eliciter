@@ -143,9 +143,9 @@ They answer different questions and behave differently:
 | | sweep | search |
 |---|---|---|
 | question | what came out this week in my categories | find me *that* paper |
-| interest gate | applied — must match a stated interest | **not applied** |
+| interest profile | orders the candidates; a session picks | **not applied** |
 | date window | `ELICITER_ARXIV_LOOKBACK_DAYS` | none |
-| queue cap | respected; tops up to 10 | **bypassed** — a manual add is a decision |
+| queue cap | respected; tops up to `ELICITER_ARXIV_KEEP` | **bypassed** — a manual add is a decision |
 
 So search is how the user gets a paper the profile would have filtered out, or re-adds one
 they rejected. Plain words are wrapped in `all:`; a query using an arxiv field prefix
